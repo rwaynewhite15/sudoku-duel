@@ -2,8 +2,8 @@
 Sudoku Duel - Web edition (Flask + Flask-SocketIO)
 Supports named game rooms and AI opponents.
 """
-import eventlet
-eventlet.monkey_patch()
+from gevent import monkey
+monkey.patch_all()
 
 import argparse
 import os
@@ -258,7 +258,7 @@ class Room:
 
 app = Flask(__name__, template_folder=".")
 app.config["SECRET_KEY"] = "sudoku-duel"
-socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 rooms = {}
 rooms_lock = threading.Lock()
