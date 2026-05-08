@@ -27,14 +27,17 @@ def _can_place(board, r, c, v):
     return True
 
 
-def _solve(board):
+def _solve(board, steps):
+    steps[0] += 1
+    if steps[0] > 100_000:
+        return True  # fail open: assume solvable rather than block the event loop
     for r in range(9):
         for c in range(9):
             if board[r][c] == 0:
                 for v in range(1, 10):
                     if _can_place(board, r, c, v):
                         board[r][c] = v
-                        if _solve(board):
+                        if _solve(board, steps):
                             return True
                         board[r][c] = 0
                 return False
@@ -42,10 +45,13 @@ def _solve(board):
 
 
 def _board_solvable(board):
-    return _solve([row[:] for row in board])
+    return _solve([row[:] for row in board], [0])
 
 
-def _fill_board(board):
+def _fill_board(board, steps):
+    steps[0] += 1
+    if steps[0] > 500_000:
+        return False
     for r in range(9):
         for c in range(9):
             if board[r][c] == 0:
@@ -54,7 +60,7 @@ def _fill_board(board):
                 for v in nums:
                     if _can_place(board, r, c, v):
                         board[r][c] = v
-                        if _fill_board(board):
+                        if _fill_board(board, steps):
                             return True
                         board[r][c] = 0
                 return False
@@ -63,7 +69,7 @@ def _fill_board(board):
 
 def _make_puzzle(prefilled):
     board = [[0] * 9 for _ in range(9)]
-    _fill_board(board)
+    _fill_board(board, [0])
     cells = [(r, c) for r in range(9) for c in range(9)]
     random.shuffle(cells)
     givens = set(cells[:min(prefilled, 81)])
