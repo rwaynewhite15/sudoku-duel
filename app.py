@@ -2,7 +2,7 @@
 Sudoku Duel - Web edition (Flask + Flask-SocketIO)
 Supports named game rooms and AI opponents.
 """
-from gevent import monkey
+from gevent import monkey, get_hub as _get_hub
 monkey.patch_all()
 
 import argparse
@@ -58,7 +58,7 @@ def _count_solutions(board, limit=2):
         if count[0] >= limit:
             return
         steps[0] += 1
-        if steps[0] > 200_000:
+        if steps[0] > 50_000:
             return
         for r in range(9):
             for c in range(9):
@@ -102,8 +102,9 @@ def _make_puzzle(prefilled):
     cells = [(r, c) for r in range(9) for c in range(9)]
     random.shuffle(cells)
     given_count = 81
+    deadline = time.time() + 18  # hard budget: never exceed this
     for r, c in cells:
-        if given_count <= prefilled:
+        if given_count <= prefilled or time.time() > deadline:
             break
         saved = puzzle[r][c]
         puzzle[r][c] = 0
@@ -122,7 +123,9 @@ class SudokuGame:
     def reset(self, lives, prefilled=22):
         self._givens = set()
         self.wrong_guesses: dict[tuple[int, int], set[int]] = {}
-        self.board, self._givens = _make_puzzle(prefilled)
+        # Run in a real OS thread so the gevent event loop (and Gunicorn's
+        # heartbeat) keeps running while the CPU-bound solver works.
+        self.board, self._givens = _get_hub().threadpool.apply(_make_puzzle, (prefilled,))
         self.lives = {0: lives, 1: lives}
         self.current_player = 0
         self.game_over = False
