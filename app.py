@@ -442,20 +442,38 @@ def _get_ai_move(game, difficulty, ai_player=1):
     if not empty:
         return None
 
+    def _blunder():
+        r, c = random.choice(empty)
+        opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
+        return (r, c, random.choice(opts)) if opts else None
+
     if difficulty == 'easy':
-        # 30% chance of a blunder: random cell + random number ignoring all rules
-        if random.random() < 0.30:
-            r, c = random.choice(empty)
-            return r, c, random.randint(1, 9)
+        # 20% outright blunder; otherwise 25% solvability-checked, 75% any valid digit
+        roll = random.random()
+        if roll < 0.20:
+            return _blunder()
+        use_solvable = roll < 0.40  # next 20% band → solvable (25% of non-blunder moves)
         random.shuffle(empty)
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
-            if opts:
+            if not opts:
+                continue
+            if use_solvable:
+                random.shuffle(opts)
+                for v in opts:
+                    tmp = [row[:] for row in board]
+                    tmp[r][c] = v
+                    if _board_solvable(tmp):
+                        return r, c, v
+            else:
                 return r, c, random.choice(opts)
 
     elif difficulty == 'medium':
-        # 75% of moves: solvability-checked; 25%: any locally-valid digit
-        use_solvable = random.random() < 0.75
+        # 8% outright blunder; otherwise 75% solvability-checked, 25% any valid digit
+        roll = random.random()
+        if roll < 0.08:
+            return _blunder()
+        use_solvable = roll < 0.77  # ~75% of non-blunder moves
         random.shuffle(empty)
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
@@ -472,6 +490,9 @@ def _get_ai_move(game, difficulty, ai_player=1):
                 return r, c, random.choice(opts)
 
     elif difficulty == 'hard':
+        # 3% outright blunder; otherwise always solvability-checked
+        if random.random() < 0.03:
+            return _blunder()
         random.shuffle(empty)
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
@@ -483,6 +504,9 @@ def _get_ai_move(game, difficulty, ai_player=1):
                     return r, c, v
 
     elif difficulty == 'expert':
+        # 1% outright blunder; otherwise most-constrained cell + solvability-checked
+        if random.random() < 0.01:
+            return _blunder()
         best: tuple[int, int, list[int]] | None = None
         best_count = 10
         for r, c in empty:
