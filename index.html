@@ -1239,7 +1239,7 @@
         const v    = board[r][c];
         cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given', 'opp-filled');
         const isGiven = state.given && state.given[r][c];
-        cell.classList.toggle('opp-filled', !isGiven && v === 0 && !!(oppBoard && oppBoard[r][c] !== 0));
+        cell.classList.toggle('opp-filled', !isGiven && !!(oppBoard && oppBoard[r][c] !== 0));
         if (lastIsOpp && !last.valid && last.row != null && last.row === r && last.col === c && v === 0) {
           const target = cell;
           cell.classList.add('opp-error');
