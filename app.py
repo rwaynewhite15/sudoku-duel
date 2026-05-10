@@ -234,14 +234,15 @@ def _get_ai_move(game, difficulty):
 
     elif difficulty == 'expert':
         # MRV: pick the most constrained cell (fewest candidates) + solvability check
-        best_r, best_c, best_opts = None, None, None
+        best: tuple[int, int, list[int]] | None = None
         best_count = 10
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(game.board, r, c, v)]
             if opts and len(opts) < best_count:
                 best_count = len(opts)
-                best_r, best_c, best_opts = r, c, opts
-        if best_r is not None:
+                best = (r, c, opts)
+        if best is not None:
+            best_r, best_c, best_opts = best
             random.shuffle(best_opts)
             for v in best_opts:
                 tmp = [row[:] for row in game.board]
@@ -256,7 +257,7 @@ class Room:
     def __init__(self, room_id, lives=3, ai_difficulty=None, prefilled=0, turn_seconds=0):
         self.room_id = room_id
         self.game = SudokuGame(lives=lives, prefilled=prefilled)
-        self.slots = [None, None]
+        self.slots: list[str | None] = [None, None]
         self.sid_to_player = {}
         self.ai_difficulty = ai_difficulty
         self.ai_player = 1 if ai_difficulty else None
@@ -379,7 +380,7 @@ def on_connect():
 
 @socketio.on("disconnect")
 def on_disconnect():
-    sid = request.sid
+    sid = request.sid  # type: ignore[attr-defined]
     with rooms_lock:
         for rid, room in list(rooms.items()):
             if sid in room.sid_to_player:
@@ -394,7 +395,7 @@ def on_disconnect():
 
 @socketio.on("join_room_req")
 def on_join_room(data):
-    sid = request.sid
+    sid = request.sid  # type: ignore[attr-defined]
     ai_difficulty = data.get("ai_difficulty")
     lives = max(1, min(5, int(data.get("lives", 3))))
     prefilled = max(0, min(60, int(data.get("prefilled", 0))))
@@ -442,7 +443,7 @@ def on_join_room(data):
 
 @socketio.on("leave_room_req")
 def on_leave_room(data):
-    sid = request.sid
+    sid = request.sid  # type: ignore[attr-defined]
     room_id = data.get("room_id")
     with rooms_lock:
         room = rooms.get(room_id)
@@ -459,7 +460,7 @@ def on_leave_room(data):
 
 @socketio.on("move")
 def on_move(data):
-    sid = request.sid
+    sid = request.sid  # type: ignore[attr-defined]
     room_id = data.get("room_id")
     with rooms_lock:
         room = rooms.get(room_id)
@@ -484,7 +485,7 @@ def on_move(data):
 
 @socketio.on("reset")
 def on_reset(data):
-    sid = request.sid
+    sid = request.sid  # type: ignore[attr-defined]
     room_id = data.get("room_id")
     with rooms_lock:
         room = rooms.get(room_id)
