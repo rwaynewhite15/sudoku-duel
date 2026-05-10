@@ -468,7 +468,10 @@
     letter-spacing: 0.15em;
     text-transform: uppercase;
     color: var(--ink-2);
-    min-width: 52px;
+    width: 72px;
+    flex-shrink: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .race-bar-label.you { color: var(--accent); }
@@ -709,6 +712,11 @@
     </span>
   </div>
 
+  <div class="lobby-input-row" style="margin-bottom:14px">
+    <input id="lobby-name" type="text" placeholder="Your name (optional)" maxlength="16"
+           autocomplete="off" autocapitalize="words" spellcheck="false">
+  </div>
+
   <div class="lobby-card">
     <div class="lobby-card-title">Play vs Human</div>
     <div class="lobby-card-sub">Share the room name with your opponent</div>
@@ -754,7 +762,7 @@
   <div class="scoreboard">
     <div class="player" id="p1">
       <span class="label">Player I</span>
-      <span class="name">North</span>
+      <span class="name" id="p1-name">Player I</span>
       <div class="lives" id="lives-1"></div>
     </div>
     <div class="vs">vs</div>
@@ -936,12 +944,13 @@
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
     const roomId           = document.getElementById('room-input').value.trim();
+    const name             = document.getElementById('lobby-name').value.trim();
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
     const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
     setLobbyLoading(puzzleDifficulty);
-    socket.emit('join_room_req', { room_id: roomId, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
+    socket.emit('join_room_req', { room_id: roomId, name, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
   document.getElementById('room-input').addEventListener('keydown', e => {
@@ -950,12 +959,13 @@
 
   document.getElementById('ai-btn').addEventListener('click', () => {
     const diff             = document.getElementById('difficulty-select').value;
+    const name             = document.getElementById('lobby-name').value.trim();
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
     const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
     setLobbyLoading(puzzleDifficulty);
-    socket.emit('join_room_req', { ai_difficulty: diff, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
+    socket.emit('join_room_req', { ai_difficulty: diff, name, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
   document.getElementById('leave-btn').addEventListener('click', () => {
@@ -1015,7 +1025,6 @@
       badge.innerHTML = `vs AI <span class="ai-pill">${myAiDifficulty}</span>`;
       document.getElementById('p2-label').innerHTML =
         `Player II · <span style="color:var(--leaf);font-style:normal">${myAiDifficulty}</span>`;
-      document.getElementById('p2-name').textContent = 'AI';
     } else {
       badge.textContent = `Room: ${myRoom}`;
     }
@@ -1161,7 +1170,20 @@
 
     // Puzzle difficulty display
     const gameInfoEl = document.getElementById('game-info');
-    if (gameInfoEl) gameInfoEl.textContent = state.puzzle_difficulty || '';
+    if (gameInfoEl && state.puzzle_difficulty) {
+      const d = state.puzzle_difficulty;
+      gameInfoEl.textContent = d.charAt(0).toUpperCase() + d.slice(1) + ' Puzzle';
+    }
+
+    // Player names
+    if (state.names) {
+      const n0 = state.names['0'] || 'Player I';
+      const n1 = state.names['1'] || 'Player II';
+      document.getElementById('p1-name').textContent = n0;
+      document.getElementById('p2-name').textContent = n1;
+      document.getElementById('race-label-0').textContent = n0;
+      document.getElementById('race-label-1').textContent = n1;
+    }
 
     // Sync mode-select; trigger syncModeUI when mode changes
     const modeEl = document.getElementById('mode-select');

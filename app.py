@@ -501,6 +501,7 @@ class Room:
         self.sid_to_player = {}
         self.ai_difficulty = ai_difficulty
         self.ai_player = 1 if ai_difficulty else None
+        self.names: dict[int, str] = {0: 'Player I', 1: 'AI' if ai_difficulty else 'Player II'}
         self.lock = threading.Lock()
         self.turn_seconds = turn_seconds
         self._turn_timer = None
@@ -561,6 +562,7 @@ class Room:
             "room_id": self.room_id,
             "room_ready": self.is_ready(),
             "ai_difficulty": self.ai_difficulty,
+            "names": {str(k): v for k, v in self.names.items()},
             "turn_seconds": self.turn_seconds,
             "turn_deadline": deadline,
         }
@@ -672,6 +674,9 @@ def on_join_room(data):
 
     with room.lock:
         pid = room.assign_slot(sid)
+    raw_name = str(data.get("name", "")).strip()[:16]
+    if raw_name:
+        room.names[pid] = raw_name
 
     sio_join_room(room_id)
     emit("welcome", {"player": pid, "room_id": room_id, "ai_difficulty": room.ai_difficulty,
