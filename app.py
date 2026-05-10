@@ -286,15 +286,23 @@ def _make_puzzle(difficulty: str) -> tuple[list[list[int]], set[tuple[int, int]]
 
 
 class SudokuGame:
-    def __init__(self, lives=3, puzzle_difficulty: str = 'medium'):
+    def __init__(self, lives=3, puzzle_difficulty: str = 'medium', mode: str = 'duel'):
+        self.mode = mode
         self.reset(lives, puzzle_difficulty)
 
     def reset(self, lives, puzzle_difficulty: str = 'medium'):
         self._givens = set()
-        self.wrong_guesses: dict[tuple[int, int], set[int]] = {}
-        # Run in a real OS thread so the gevent event loop (and Gunicorn's
-        # heartbeat) keeps running while the CPU-bound solver works.
-        self.board, self._givens = _get_hub().threadpool.apply(_make_puzzle, (puzzle_difficulty,))
+        template, self._givens = _get_hub().threadpool.apply(_make_puzzle, (puzzle_difficulty,))
+        self.board = template
+        if self.mode == 'race':
+            # Each player works their own copy of the same starting board
+            self.boards = {0: [row[:] for row in template], 1: [row[:] for row in template]}
+            self.race_wrong: dict[int, dict[tuple[int, int], set[int]]] = {0: {}, 1: {}}
+            self.wrong_guesses: dict[tuple[int, int], set[int]] = {}
+        else:
+            self.boards: dict[int, list[list[int]]] = {}
+            self.race_wrong = {}
+            self.wrong_guesses = {}
         self.lives = {0: lives, 1: lives}
         self.current_player = 0
         self.game_over = False
@@ -302,30 +310,35 @@ class SudokuGame:
         self.last_move = None
         self.starting_lives = lives
 
-    def is_valid_move(self, row, col, val):
+    def _is_valid_on(self, board, row, col, val):
         if not (0 <= row < 9 and 0 <= col < 9 and 1 <= val <= 9):
             return False, "out of range"
-        if self.board[row][col] != 0:
+        if board[row][col] != 0:
             return False, "cell already occupied"
         for c in range(9):
-            if self.board[row][c] == val:
+            if board[row][c] == val:
                 return False, f"{val} already in row {row + 1}"
         for r in range(9):
-            if self.board[r][col] == val:
+            if board[r][col] == val:
                 return False, f"{val} already in column {col + 1}"
         br, bc = (row // 3) * 3, (col // 3) * 3
         for r in range(br, br + 3):
             for c in range(bc, bc + 3):
-                if self.board[r][c] == val:
+                if board[r][c] == val:
                     return False, f"{val} already in 3x3 box"
         return True, "ok"
+
+    def is_valid_move(self, row, col, val):
+        return self._is_valid_on(self.board, row, col, val)
 
     def make_move(self, player, row, col, val):
         if self.game_over:
             return "game already over"
+        if self.mode == 'race':
+            return self._race_move(player, row, col, val)
         if player != self.current_player:
             return "not your turn"
-        valid, reason = self.is_valid_move(row, col, val)
+        valid, reason = self._is_valid_on(self.board, row, col, val)
         if valid:
             self.board[row][col] = val
             if not _board_solvable(self.board):
@@ -353,23 +366,75 @@ class SudokuGame:
                 self.current_player = 1 - player
         return reason
 
+    def _race_move(self, player, row, col, val):
+        board = self.boards[player]
+        valid, reason = self._is_valid_on(board, row, col, val)
+        if valid:
+            board[row][col] = val
+            if not _board_solvable(board):
+                board[row][col] = 0
+                valid = False
+                reason = "move makes the board unsolvable"
+        self.last_move = {
+            "player": player, "row": row, "col": col, "val": val,
+            "valid": valid, "reason": reason,
+        }
+        if valid:
+            self.race_wrong[player].pop((row, col), None)
+            if all(board[r][c] != 0 for r in range(9) for c in range(9)):
+                self.game_over = True
+                self.winner = player
+        else:
+            self.race_wrong[player].setdefault((row, col), set()).add(val)
+            self.lives[player] -= 1
+            if self.lives[player] <= 0:
+                self.game_over = True
+                self.winner = 1 - player
+        return reason
+
+    def _race_progress(self, player):
+        board = self.boards[player]
+        return sum(1 for r in range(9) for c in range(9)
+                   if board[r][c] != 0 and (r, c) not in self._givens)
+
     def state(self):
-        return {
-            "board": self.board,
-            "given": [[(r, c) in self._givens for c in range(9)] for r in range(9)],
+        given = [[(r, c) in self._givens for c in range(9)] for r in range(9)]
+        base = {
+            "mode": self.mode,
+            "given": given,
             "lives": self.lives,
-            "current_player": self.current_player,
             "game_over": self.game_over,
             "winner": self.winner,
             "last_move": self.last_move,
             "starting_lives": self.starting_lives,
-            "wrong_guesses": {f"{r},{c}": sorted(vals) for (r, c), vals in self.wrong_guesses.items()},
+        }
+        if self.mode == 'race':
+            total = 81 - len(self._givens)
+            return {
+                **base,
+                "boards": {str(p): self.boards[p] for p in (0, 1)},
+                "current_player": -1,
+                "wrong_guesses": {
+                    str(p): {f"{r},{c}": sorted(v)
+                             for (r, c), v in self.race_wrong[p].items()}
+                    for p in (0, 1)
+                },
+                "progress": {str(p): self._race_progress(p) for p in (0, 1)},
+                "total_cells": total,
+            }
+        return {
+            **base,
+            "board": self.board,
+            "current_player": self.current_player,
+            "wrong_guesses": {f"{r},{c}": sorted(vals)
+                              for (r, c), vals in self.wrong_guesses.items()},
         }
 
 
-def _get_ai_move(game, difficulty):
+def _get_ai_move(game, difficulty, ai_player=1):
     """Return (row, col, val) for the AI based on difficulty, or None."""
-    empty = [(r, c) for r in range(9) for c in range(9) if game.board[r][c] == 0]
+    board = game.boards.get(ai_player, game.board) if game.mode == 'race' else game.board
+    empty = [(r, c) for r in range(9) for c in range(9) if board[r][c] == 0]
     if not empty:
         return None
 
@@ -378,39 +443,35 @@ def _get_ai_move(game, difficulty):
         if random.random() < 0.30:
             r, c = random.choice(empty)
             return r, c, random.randint(1, 9)
-        # Otherwise a constraint-valid move (may still break solvability)
         random.shuffle(empty)
         for r, c in empty:
-            opts = [v for v in range(1, 10) if _can_place(game.board, r, c, v)]
+            opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
             if opts:
                 return r, c, random.choice(opts)
 
     elif difficulty == 'medium':
-        # Constraint-valid, no solvability check — will occasionally break solvability
         random.shuffle(empty)
         for r, c in empty:
-            opts = [v for v in range(1, 10) if _can_place(game.board, r, c, v)]
+            opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
             if opts:
                 return r, c, random.choice(opts)
 
     elif difficulty == 'hard':
-        # Constraint-valid + solvability check — never blunders
         random.shuffle(empty)
         for r, c in empty:
-            opts = [v for v in range(1, 10) if _can_place(game.board, r, c, v)]
+            opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
             random.shuffle(opts)
             for v in opts:
-                tmp = [row[:] for row in game.board]
+                tmp = [row[:] for row in board]
                 tmp[r][c] = v
                 if _board_solvable(tmp):
                     return r, c, v
 
     elif difficulty == 'expert':
-        # MRV: pick the most constrained cell (fewest candidates) + solvability check
         best: tuple[int, int, list[int]] | None = None
         best_count = 10
         for r, c in empty:
-            opts = [v for v in range(1, 10) if _can_place(game.board, r, c, v)]
+            opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
             if opts and len(opts) < best_count:
                 best_count = len(opts)
                 best = (r, c, opts)
@@ -418,7 +479,7 @@ def _get_ai_move(game, difficulty):
             best_r, best_c, best_opts = best
             random.shuffle(best_opts)
             for v in best_opts:
-                tmp = [row[:] for row in game.board]
+                tmp = [row[:] for row in board]
                 tmp[best_r][best_c] = v
                 if _board_solvable(tmp):
                     return best_r, best_c, v
@@ -427,9 +488,11 @@ def _get_ai_move(game, difficulty):
 
 
 class Room:
-    def __init__(self, room_id, lives=3, ai_difficulty=None, puzzle_difficulty='medium', turn_seconds=0):
+    def __init__(self, room_id, lives=3, ai_difficulty=None, puzzle_difficulty='medium',
+                 mode='duel', turn_seconds=0):
         self.room_id = room_id
-        self.game = SudokuGame(lives=lives, puzzle_difficulty=puzzle_difficulty)
+        self.mode = mode
+        self.game = SudokuGame(lives=lives, puzzle_difficulty=puzzle_difficulty, mode=mode)
         self.slots: list[str | None] = [None, None]
         self.sid_to_player = {}
         self.ai_difficulty = ai_difficulty
@@ -509,7 +572,7 @@ rooms_lock = threading.Lock()
 
 def _maybe_start_timer(room):
     """Start turn timer if room is ready, game is active, and it's a human's turn."""
-    if room.turn_seconds <= 0 or room.game.game_over or not room.is_ready():
+    if room.game.mode == 'race' or room.turn_seconds <= 0 or room.game.game_over or not room.is_ready():
         room._cancel_turn_timer()
         return
     if room.ai_player is not None and room.game.current_player == room.ai_player:
@@ -535,9 +598,9 @@ def _handle_timeout(room, token):
             room.game.current_player = 1 - player
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room.room_id)
-    if (room.ai_player is not None
-            and not room.game.game_over
-            and room.game.current_player == room.ai_player):
+    if (room.ai_player is not None and not room.game.game_over
+            and (room.game.mode == 'race'
+                 or room.game.current_player == room.ai_player)):
         _schedule_ai_move(room)
 
 
@@ -573,12 +636,14 @@ def on_join_room(data):
     lives = max(1, min(5, int(data.get("lives", 3))))
     pd = data.get("puzzle_difficulty", "medium")
     puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
+    gm = data.get("mode", "duel")
+    mode = gm if gm in ("duel", "race") else "duel"
     turn_seconds = max(0, min(300, int(data.get("turn_seconds", 0))))
 
     if ai_difficulty:
         room_id = f"ai_{uuid.uuid4().hex[:8]}"
         room = Room(room_id, lives=lives, ai_difficulty=ai_difficulty,
-                    puzzle_difficulty=puzzle_difficulty, turn_seconds=turn_seconds)
+                    puzzle_difficulty=puzzle_difficulty, mode=mode, turn_seconds=turn_seconds)
         with rooms_lock:
             rooms[room_id] = room
     else:
@@ -589,7 +654,7 @@ def on_join_room(data):
         with rooms_lock:
             if room_id not in rooms:
                 room = Room(room_id, lives=lives, puzzle_difficulty=puzzle_difficulty,
-                            turn_seconds=turn_seconds)
+                            mode=mode, turn_seconds=turn_seconds)
                 rooms[room_id] = room
             else:
                 room = rooms[room_id]
@@ -609,9 +674,9 @@ def on_join_room(data):
     socketio.emit("state", room.full_state(), to=room_id)
     _maybe_start_timer(room)
 
-    if (room.ai_player is not None
-            and room.game.current_player == room.ai_player
-            and not room.game.game_over):
+    if (room.ai_player is not None and not room.game.game_over
+            and (room.game.mode == 'race'
+                 or room.game.current_player == room.ai_player)):
         _schedule_ai_move(room)
 
 
@@ -651,9 +716,9 @@ def on_move(data):
         room.game.make_move(pid, row, col, val)
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
-    if (room.ai_player is not None
-            and room.game.current_player == room.ai_player
-            and not room.game.game_over):
+    if (room.ai_player is not None and not room.game.game_over
+            and (room.game.mode == 'race'
+                 or room.game.current_player == room.ai_player)):
         _schedule_ai_move(room)
 
 
@@ -669,12 +734,17 @@ def on_reset(data):
         lives = max(1, min(5, int(data.get("lives", 3))))
         pd = data.get("puzzle_difficulty", "medium")
         puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
+        gm = data.get("mode", room.mode)
+        new_mode = gm if gm in ("duel", "race") else room.mode
         turn_seconds = max(0, min(300, int(data.get("turn_seconds", room.turn_seconds))))
     except (TypeError, ValueError):
         lives = 3
         puzzle_difficulty = "medium"
+        new_mode = room.mode
         turn_seconds = room.turn_seconds
     with room.lock:
+        room.mode = new_mode
+        room.game.mode = new_mode
         room.turn_seconds = turn_seconds
         room.game.reset(lives, puzzle_difficulty)
     _maybe_start_timer(room)
@@ -689,18 +759,24 @@ def _schedule_ai_move(room):
 
 
 def _do_ai_move(room):
+    ai = room.ai_player
+    if ai is None:
+        return
     with room.lock:
-        if room.game.game_over or room.game.current_player != room.ai_player:
+        if room.game.game_over:
             return
-        move = _get_ai_move(room.game, room.ai_difficulty)
+        if room.game.mode != 'race' and room.game.current_player != ai:
+            return
+        move = _get_ai_move(room.game, room.ai_difficulty, ai_player=ai)
         if not move:
             return
         r, c, v = move
-        room.game.make_move(room.ai_player, r, c, v)
+        room.game.make_move(ai, r, c, v)
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room.room_id)
-    if room.game.current_player == room.ai_player and not room.game.game_over:
-        _schedule_ai_move(room)
+    if not room.game.game_over:
+        if room.game.mode == 'race' or room.game.current_player == ai:
+            _schedule_ai_move(room)
 
 
 def main():

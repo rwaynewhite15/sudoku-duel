@@ -420,6 +420,51 @@
     75% { transform: translateX(-2px); }
   }
 
+  /* ── Race progress bars ── */
+  .race-progress {
+    margin-bottom: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+  .race-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .race-bar-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    min-width: 52px;
+    white-space: nowrap;
+  }
+  .race-bar-label.you { color: var(--accent); }
+  .race-bar-track {
+    flex: 1;
+    height: 9px;
+    background: var(--rule);
+    border: 1px solid var(--ink);
+    overflow: hidden;
+  }
+  .race-bar-fill {
+    height: 100%;
+    background: var(--leaf);
+    transition: width 0.35s ease;
+  }
+  .race-bar-fill.you { background: var(--accent); }
+  .race-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ink-2);
+    min-width: 36px;
+    text-align: right;
+  }
+  .race-pct.you { color: var(--accent); }
+
   .cg {
     position: absolute;
     bottom: 2px;
@@ -606,6 +651,11 @@
       <option value="medium" selected>Medium</option>
       <option value="hard">Hard</option>
     </select>
+    <label for="lobby-mode">Mode</label>
+    <select id="lobby-mode">
+      <option value="duel" selected>Duel</option>
+      <option value="race">Race</option>
+    </select>
     <label for="lobby-timer">Timer</label>
     <select id="lobby-timer">
       <option value="0" selected>Off</option>
@@ -670,6 +720,19 @@
     </div>
   </div>
 
+  <div id="race-progress" class="race-progress" style="display:none">
+    <div class="race-bar-row">
+      <span class="race-bar-label" id="race-label-0">Player I</span>
+      <div class="race-bar-track"><div class="race-bar-fill" id="race-fill-0" style="width:0%"></div></div>
+      <span class="race-pct" id="race-pct-0">0%</span>
+    </div>
+    <div class="race-bar-row">
+      <span class="race-bar-label" id="race-label-1">Player II</span>
+      <div class="race-bar-track"><div class="race-bar-fill" id="race-fill-1" style="width:0%"></div></div>
+      <span class="race-pct" id="race-pct-1">0%</span>
+    </div>
+  </div>
+
   <div id="timer-bar-wrap" class="timer-bar-wrap" style="display:none">
     <div class="timer-bar-track">
       <div class="timer-bar-fill" id="timer-bar-fill"></div>
@@ -699,6 +762,11 @@
       <option value="easy">Easy</option>
       <option value="medium" selected>Medium</option>
       <option value="hard">Hard</option>
+    </select>
+    <label for="mode-select">Mode</label>
+    <select id="mode-select">
+      <option value="duel" selected>Duel</option>
+      <option value="race">Race</option>
     </select>
     <label for="timer-select">Timer</label>
     <select id="timer-select">
@@ -802,9 +870,10 @@
     const roomId      = document.getElementById('room-input').value.trim();
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
+    const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
     document.getElementById('lobby-error').style.display = 'none';
-    socket.emit('join_room_req', { room_id: roomId, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
+    socket.emit('join_room_req', { room_id: roomId, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
   document.getElementById('room-input').addEventListener('keydown', e => {
@@ -815,8 +884,9 @@
     const diff        = document.getElementById('difficulty-select').value;
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
+    const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
-    socket.emit('join_room_req', { ai_difficulty: diff, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
+    socket.emit('join_room_req', { ai_difficulty: diff, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
   document.getElementById('leave-btn').addEventListener('click', () => {
@@ -883,16 +953,25 @@
 
   // ── Game interaction ──
   function canPlay() {
-    return state
-      && !state.game_over
-      && myPlayer !== null
-      && state.current_player === myPlayer
-      && state.room_ready;
+    if (!state || state.game_over || myPlayer === null || !state.room_ready) return false;
+    if (state.mode === 'race') return true;
+    return state.current_player === myPlayer;
+  }
+
+  function myBoard() {
+    if (!state) return null;
+    return state.mode === 'race' ? state.boards[String(myPlayer)] : state.board;
+  }
+
+  function myWrongGuesses() {
+    if (!state || !state.wrong_guesses) return null;
+    return state.mode === 'race' ? state.wrong_guesses[String(myPlayer)] : state.wrong_guesses;
   }
 
   function onCellTap(r, c) {
     if (!canPlay()) return;
-    if (state.board[r][c] !== 0) return;
+    const board = myBoard();
+    if (!board || board[r][c] !== 0) return;
     if (armedNum !== null) {
       socket.emit('move', { room_id: myRoom, row: r, col: c, val: armedNum });
       armedNum = null; selected = null;
@@ -937,6 +1016,10 @@
 
   function render() {
     if (!state) return;
+    const isRace = state.mode === 'race';
+    const board  = myBoard();
+    const wg     = myWrongGuesses();
+
     const l1 = state.lives['0'] ?? state.lives[0];
     const l2 = state.lives['1'] ?? state.lives[1];
     renderHearts('lives-1', l1, state.starting_lives);
@@ -944,49 +1027,78 @@
 
     const p1 = document.getElementById('p1');
     const p2 = document.getElementById('p2');
-    p1.classList.toggle('active', !state.game_over && state.current_player === 0);
-    p2.classList.toggle('active', !state.game_over && state.current_player === 1);
+    // In race mode both players are always "active"; in duel only the current player is
+    p1.classList.toggle('active', !state.game_over && (isRace || state.current_player === 0));
+    p2.classList.toggle('active', !state.game_over && (isRace || state.current_player === 1));
     p1.classList.toggle('you', myPlayer === 0);
     p2.classList.toggle('you', myPlayer === 1);
 
+    // Race progress bars
+    const raceWrap = document.getElementById('race-progress');
+    if (isRace && board) {
+      raceWrap.style.display = 'flex';
+      const total = state.total_cells || 1;
+      for (const p of [0, 1]) {
+        const prog  = (state.progress && state.progress[String(p)]) || 0;
+        const pct   = Math.round(prog / total * 100);
+        const isYou = p === myPlayer;
+        document.getElementById(`race-fill-${p}`).style.width = pct + '%';
+        document.getElementById(`race-fill-${p}`).classList.toggle('you', isYou);
+        document.getElementById(`race-pct-${p}`).textContent = pct + '%';
+        document.getElementById(`race-pct-${p}`).classList.toggle('you', isYou);
+        document.getElementById(`race-label-${p}`).classList.toggle('you', isYou);
+      }
+    } else {
+      raceWrap.style.display = 'none';
+    }
+
+    // Sync mode-select to current state
+    const modeEl = document.getElementById('mode-select');
+    if (modeEl && state.mode) modeEl.value = state.mode;
+
     const last = state.last_move;
-    for (let r = 0; r < 9; r++) {
+    // Only show the last-move highlight if this player was involved (race) or it's shared (duel)
+    const lastIsMe = last && (isRace ? last.player === myPlayer : true);
+
+    if (board) for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const cell = boardEl.children[r * 9 + c];
         const cv   = cell.firstElementChild;
         const cg   = cell.lastElementChild;
-        const v    = state.board[r][c];
+        const v    = board[r][c];
         cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given');
         const isGiven = state.given && state.given[r][c];
         if (v === 0) {
           cv.textContent = '';
           cell.classList.add('empty');
           if (canPlay()) cell.classList.add('can-play');
-          const guesses = state.wrong_guesses && state.wrong_guesses[`${r},${c}`];
+          const guesses = wg && wg[`${r},${c}`];
           cg.textContent = guesses && guesses.length ? guesses.join('') : '';
         } else {
           cv.textContent = v;
           cg.textContent = '';
           if (isGiven) cell.classList.add('given');
         }
-        if (last && last.row != null && last.valid && last.row === r && last.col === c) {
+        if (lastIsMe && last.row != null && last.valid && last.row === r && last.col === c) {
           cell.classList.add('last-placed');
         }
-        if (last && last.row != null && last.row === r && last.col === c) {
+        if (lastIsMe && last.row != null && last.row === r && last.col === c) {
           if (last.valid) {
             cell.classList.add('fresh');
           } else if (v === 0) {
             cv.textContent = last.val;
             cg.textContent = '';
             cell.classList.add('error');
-            const target = cell;
+            const target   = cell;
             const targetCv = cv;
             const targetCg = cg;
             setTimeout(() => {
-              if (state && state.board[r][c] === 0) {
+              const cur = myBoard();
+              if (cur && cur[r][c] === 0) {
                 targetCv.textContent = '';
                 target.classList.remove('error');
-                const guesses = state.wrong_guesses && state.wrong_guesses[`${r},${c}`];
+                const g = myWrongGuesses();
+                const guesses = g && g[`${r},${c}`];
                 targetCg.textContent = guesses && guesses.length ? guesses.join('') : '';
               }
             }, 650);
@@ -997,9 +1109,9 @@
 
     // Digit usage count — disable picker buttons for exhausted digits
     const digitCount = new Array(10).fill(0);
-    for (let r = 0; r < 9; r++)
+    if (board) for (let r = 0; r < 9; r++)
       for (let c = 0; c < 9; c++) {
-        const v = state.board[r][c];
+        const v = board[r][c];
         if (v) digitCount[v]++;
       }
     pickerEl.querySelectorAll('button').forEach(b => {
@@ -1013,16 +1125,16 @@
     if (state.game_over) {
       stopTimerLoop();
       if (state.winner === myPlayer) {
-        statusEl.textContent = '★ You win ★';
+        statusEl.textContent = isRace ? '🏁 You finished first!' : '★ You win ★';
         statusEl.classList.add('win');
       } else if (myPlayer === null) {
         const winnerName = (myAiDifficulty && state.winner === 1) ? 'AI' : `Player ${state.winner + 1}`;
         statusEl.textContent = `${winnerName} wins`;
       } else {
-        statusEl.textContent = 'You lose';
+        statusEl.textContent = isRace ? 'Opponent finished first' : 'You lose';
         statusEl.classList.add('lose');
       }
-    } else if (last && !last.valid) {
+    } else if (last && !last.valid && lastIsMe) {
       const isAiMove = myAiDifficulty && last.player === 1;
       const who = isAiMove ? 'AI' : (last.player === myPlayer ? 'You' : `Player ${last.player + 1}`);
       const msg = last.reason === "time's up"
@@ -1037,8 +1149,8 @@
       updateTurnStatus();
     }
 
-    // Turn timer bar
-    if (state.turn_deadline && state.turn_seconds > 0 && !state.game_over) {
+    // Turn timer bar (duel only)
+    if (!isRace && state.turn_deadline && state.turn_seconds > 0 && !state.game_over) {
       timerDeadline = state.turn_deadline;
       timerTotal    = state.turn_seconds;
       startTimerLoop();
@@ -1056,6 +1168,11 @@
     if (!state.room_ready) {
       statusEl.textContent = 'Waiting for opponent to join…';
       statusEl.classList.add('waiting');
+      return;
+    }
+    if (state.mode === 'race') {
+      statusEl.textContent = 'Race! Fill the board before your opponent.';
+      statusEl.classList.add('your-turn');
       return;
     }
     if (myPlayer === null) {
@@ -1076,9 +1193,10 @@
   document.getElementById('reset-btn').addEventListener('click', () => {
     const lives       = parseInt(document.getElementById('lives-select').value);
     const puzzleDifficulty = document.getElementById('prefilled-select').value;
+    const mode             = document.getElementById('mode-select').value;
     const turnSeconds      = parseInt(document.getElementById('timer-select').value);
     selected = null; armedNum = null;
-    socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
+    socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 </script>
 </body>
