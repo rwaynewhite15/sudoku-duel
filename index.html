@@ -602,9 +602,9 @@
     </select>
     <label for="lobby-prefilled">Puzzle</label>
     <select id="lobby-prefilled">
-      <option value="40">Easy</option>
-      <option value="30" selected>Medium</option>
-      <option value="22">Hard</option>
+      <option value="easy">Easy</option>
+      <option value="medium" selected>Medium</option>
+      <option value="hard">Hard</option>
     </select>
     <label for="lobby-timer">Timer</label>
     <select id="lobby-timer">
@@ -696,9 +696,9 @@
     </select>
     <label for="prefilled-select">Puzzle</label>
     <select id="prefilled-select">
-      <option value="40">Easy</option>
-      <option value="30" selected>Medium</option>
-      <option value="22">Hard</option>
+      <option value="easy">Easy</option>
+      <option value="medium" selected>Medium</option>
+      <option value="hard">Hard</option>
     </select>
     <label for="timer-select">Timer</label>
     <select id="timer-select">
@@ -800,11 +800,11 @@
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
     const roomId      = document.getElementById('room-input').value.trim();
-    const lives       = parseInt(document.getElementById('lobby-lives').value);
-    const prefilled   = parseInt(document.getElementById('lobby-prefilled').value);
-    const turnSeconds = parseInt(document.getElementById('lobby-timer').value);
+    const lives            = parseInt(document.getElementById('lobby-lives').value);
+    const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
+    const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
     document.getElementById('lobby-error').style.display = 'none';
-    socket.emit('join_room_req', { room_id: roomId, lives, prefilled, turn_seconds: turnSeconds });
+    socket.emit('join_room_req', { room_id: roomId, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
   });
 
   document.getElementById('room-input').addEventListener('keydown', e => {
@@ -813,10 +813,10 @@
 
   document.getElementById('ai-btn').addEventListener('click', () => {
     const diff        = document.getElementById('difficulty-select').value;
-    const lives       = parseInt(document.getElementById('lobby-lives').value);
-    const prefilled   = parseInt(document.getElementById('lobby-prefilled').value);
-    const turnSeconds = parseInt(document.getElementById('lobby-timer').value);
-    socket.emit('join_room_req', { ai_difficulty: diff, lives, prefilled, turn_seconds: turnSeconds });
+    const lives            = parseInt(document.getElementById('lobby-lives').value);
+    const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
+    const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
+    socket.emit('join_room_req', { ai_difficulty: diff, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
   });
 
   document.getElementById('leave-btn').addEventListener('click', () => {
@@ -1075,10 +1075,10 @@
 
   document.getElementById('reset-btn').addEventListener('click', () => {
     const lives       = parseInt(document.getElementById('lives-select').value);
-    const prefilled   = parseInt(document.getElementById('prefilled-select').value);
-    const turnSeconds = parseInt(document.getElementById('timer-select').value);
+    const puzzleDifficulty = document.getElementById('prefilled-select').value;
+    const turnSeconds      = parseInt(document.getElementById('timer-select').value);
     selected = null; armedNum = null;
-    socket.emit('reset', { room_id: myRoom, lives, prefilled, turn_seconds: turnSeconds });
+    socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, turn_seconds: turnSeconds });
   });
 </script>
 </body>

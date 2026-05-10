@@ -94,38 +94,207 @@ def _fill_board(board, steps):
     return True
 
 
-def _make_puzzle(prefilled):
-    board = [[0] * 9 for _ in range(9)]
-    if not _fill_board(board, [0]):
-        return [[0] * 9 for _ in range(9)], set()
-    puzzle = [row[:] for row in board]
-    cells = [(r, c) for r in range(9) for c in range(9)]
-    random.shuffle(cells)
-    given_count = 81
-    deadline = time.time() + 18  # hard budget: never exceed this
-    for r, c in cells:
-        if given_count <= prefilled or time.time() > deadline:
+# ── Precomputed Sudoku unit/peer structure ────────────────────────────────────
+_UNITS: list[list[tuple[int, int]]] = (
+    [[(r, c) for c in range(9)] for r in range(9)] +
+    [[(r, c) for r in range(9)] for c in range(9)] +
+    [[(br * 3 + dr, bc * 3 + dc) for dr in range(3) for dc in range(3)]
+     for br in range(3) for bc in range(3)]
+)
+_BOXES: list[list[tuple[int, int]]] = _UNITS[18:]
+_CELL_UNITS: dict[tuple[int, int], list[list[tuple[int, int]]]] = {
+    (r, c): [u for u in _UNITS if (r, c) in u]
+    for r in range(9) for c in range(9)
+}
+_PEERS: dict[tuple[int, int], frozenset[tuple[int, int]]] = {
+    cell: frozenset(x for u in _CELL_UNITS[cell] for x in u if x != cell)
+    for cell in _CELL_UNITS
+}
+
+
+def _score_puzzle(puzzle: list[list[int]]) -> int:
+    """Return the highest technique level needed to solve the puzzle.
+    0 = naked singles only  → Easy
+    1 = hidden singles      → Medium
+    2 = pairs/pointing/stuck → Hard
+    """
+    board = [row[:] for row in puzzle]
+    cands: dict[tuple[int, int], set[int]] = {
+        (r, c): {v for v in range(1, 10) if _can_place(board, r, c, v)}
+        for r in range(9) for c in range(9) if board[r][c] == 0
+    }
+
+    def _place(cell: tuple[int, int], val: int) -> None:
+        r, c = cell
+        board[r][c] = val
+        del cands[cell]
+        for peer in _PEERS[cell]:
+            if peer in cands:
+                cands[peer].discard(val)
+
+    max_level = 0
+    changed = True
+    while changed and cands:
+        changed = False
+
+        # Naked single
+        for cell in list(cands):
+            if len(cands[cell]) == 1:
+                _place(cell, next(iter(cands[cell])))
+                changed = True
+        if changed:
+            continue
+
+        # Hidden single
+        for unit in _UNITS:
+            for val in range(1, 10):
+                hits = [cell for cell in unit if cell in cands and val in cands[cell]]
+                if len(hits) == 1:
+                    _place(hits[0], val)
+                    max_level = max(max_level, 1)
+                    changed = True
+                    break
+            if changed:
+                break
+        if changed:
+            continue
+
+        # Naked pair (elimination)
+        for unit in _UNITS:
+            twos = [cell for cell in unit if cell in cands and len(cands[cell]) == 2]
+            for i, c1 in enumerate(twos):
+                for c2 in twos[i + 1:]:
+                    if cands[c1] == cands[c2]:
+                        pair_vals = cands[c1]
+                        for cell in unit:
+                            if cell in cands and cell != c1 and cell != c2:
+                                before = len(cands[cell])
+                                cands[cell] -= pair_vals
+                                if len(cands[cell]) < before:
+                                    max_level = max(max_level, 2)
+                                    changed = True
+        if changed:
+            continue
+
+        # Pointing pairs/triples (box → line)
+        for box in _BOXES:
+            box_set = set(box)
+            for val in range(1, 10):
+                hits = [cell for cell in box if cell in cands and val in cands[cell]]
+                if len(hits) < 2:
+                    continue
+                rows = {cell[0] for cell in hits}
+                cols = {cell[1] for cell in hits}
+                if len(rows) == 1:
+                    row = next(iter(rows))
+                    for cell in [(row, c) for c in range(9)]:
+                        if cell not in box_set and cell in cands and val in cands[cell]:
+                            cands[cell].discard(val)
+                            max_level = max(max_level, 2)
+                            changed = True
+                elif len(cols) == 1:
+                    col = next(iter(cols))
+                    for cell in [(r, col) for r in range(9)]:
+                        if cell not in box_set and cell in cands and val in cands[cell]:
+                            cands[cell].discard(val)
+                            max_level = max(max_level, 2)
+                            changed = True
+        if changed:
+            continue
+
+        # Box-line reduction (line → box)
+        for line in range(9):
+            for val in range(1, 10):
+                row_hits = [(line, c) for c in range(9)
+                            if (line, c) in cands and val in cands[(line, c)]]
+                if len(row_hits) >= 2:
+                    boxes = {(r // 3, c // 3) for r, c in row_hits}
+                    if len(boxes) == 1:
+                        br, bc = next(iter(boxes))
+                        for r in range(br * 3, br * 3 + 3):
+                            for c in range(bc * 3, bc * 3 + 3):
+                                if ((r, c) not in row_hits and (r, c) in cands
+                                        and val in cands[(r, c)]):
+                                    cands[(r, c)].discard(val)
+                                    max_level = max(max_level, 2)
+                                    changed = True
+                col_hits = [(r, line) for r in range(9)
+                            if (r, line) in cands and val in cands[(r, line)]]
+                if len(col_hits) >= 2:
+                    boxes = {(r // 3, c // 3) for r, c in col_hits}
+                    if len(boxes) == 1:
+                        br, bc = next(iter(boxes))
+                        for r in range(br * 3, br * 3 + 3):
+                            for c in range(bc * 3, bc * 3 + 3):
+                                if ((r, c) not in col_hits and (r, c) in cands
+                                        and val in cands[(r, c)]):
+                                    cands[(r, c)].discard(val)
+                                    max_level = max(max_level, 2)
+                                    changed = True
+        if changed:
+            continue
+
+        max_level = max(max_level, 2)  # stuck — needs harder techniques
+        break
+
+    if cands:
+        max_level = max(max_level, 2)
+    return max_level
+
+
+def _make_puzzle(difficulty: str) -> tuple[list[list[int]], set[tuple[int, int]]]:
+    """Generate a uniquely-solvable puzzle matching the target technique difficulty."""
+    target = {'easy': 0, 'medium': 1, 'hard': 2}[difficulty]
+    clue_target = {'easy': 44, 'medium': 32, 'hard': 26}[difficulty]
+    deadline = time.time() + 18
+    best_puzzle: list[list[int]] | None = None
+    best_dist = 999
+
+    while time.time() < deadline:
+        board = [[0] * 9 for _ in range(9)]
+        if not _fill_board(board, [0]):
+            continue
+        puzzle = [row[:] for row in board]
+        cells = [(r, c) for r in range(9) for c in range(9)]
+        random.shuffle(cells)
+        count = 81
+        for r, c in cells:
+            if count <= clue_target or time.time() > deadline:
+                break
+            saved = puzzle[r][c]
+            puzzle[r][c] = 0
+            if _count_solutions(puzzle) == 1:
+                count -= 1
+            else:
+                puzzle[r][c] = saved
+        score = _score_puzzle(puzzle)
+        dist = abs(score - target)
+        if dist < best_dist:
+            best_dist = dist
+            best_puzzle = [row[:] for row in puzzle]
+        if score == target:
             break
-        saved = puzzle[r][c]
-        puzzle[r][c] = 0
-        if _count_solutions(puzzle) == 1:
-            given_count -= 1
+        # Adapt clue target: too easy → fewer clues, too hard → more clues
+        if score < target:
+            clue_target = max(22, clue_target - 4)
         else:
-            puzzle[r][c] = saved  # removing this cell breaks uniqueness
+            clue_target = min(50, clue_target + 4)
+
+    puzzle = best_puzzle if best_puzzle is not None else puzzle
     givens = {(r, c) for r in range(9) for c in range(9) if puzzle[r][c] != 0}
     return puzzle, givens
 
 
 class SudokuGame:
-    def __init__(self, lives=3, prefilled=22):
-        self.reset(lives, prefilled)
+    def __init__(self, lives=3, puzzle_difficulty: str = 'medium'):
+        self.reset(lives, puzzle_difficulty)
 
-    def reset(self, lives, prefilled=22):
+    def reset(self, lives, puzzle_difficulty: str = 'medium'):
         self._givens = set()
         self.wrong_guesses: dict[tuple[int, int], set[int]] = {}
         # Run in a real OS thread so the gevent event loop (and Gunicorn's
         # heartbeat) keeps running while the CPU-bound solver works.
-        self.board, self._givens = _get_hub().threadpool.apply(_make_puzzle, (prefilled,))
+        self.board, self._givens = _get_hub().threadpool.apply(_make_puzzle, (puzzle_difficulty,))
         self.lives = {0: lives, 1: lives}
         self.current_player = 0
         self.game_over = False
@@ -258,9 +427,9 @@ def _get_ai_move(game, difficulty):
 
 
 class Room:
-    def __init__(self, room_id, lives=3, ai_difficulty=None, prefilled=0, turn_seconds=0):
+    def __init__(self, room_id, lives=3, ai_difficulty=None, puzzle_difficulty='medium', turn_seconds=0):
         self.room_id = room_id
-        self.game = SudokuGame(lives=lives, prefilled=prefilled)
+        self.game = SudokuGame(lives=lives, puzzle_difficulty=puzzle_difficulty)
         self.slots: list[str | None] = [None, None]
         self.sid_to_player = {}
         self.ai_difficulty = ai_difficulty
@@ -402,13 +571,14 @@ def on_join_room(data):
     sid = request.sid  # type: ignore[attr-defined]
     ai_difficulty = data.get("ai_difficulty")
     lives = max(1, min(5, int(data.get("lives", 3))))
-    prefilled = max(22, min(60, int(data.get("prefilled", 22))))
+    pd = data.get("puzzle_difficulty", "medium")
+    puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
     turn_seconds = max(0, min(300, int(data.get("turn_seconds", 0))))
 
     if ai_difficulty:
         room_id = f"ai_{uuid.uuid4().hex[:8]}"
         room = Room(room_id, lives=lives, ai_difficulty=ai_difficulty,
-                    prefilled=prefilled, turn_seconds=turn_seconds)
+                    puzzle_difficulty=puzzle_difficulty, turn_seconds=turn_seconds)
         with rooms_lock:
             rooms[room_id] = room
     else:
@@ -418,7 +588,7 @@ def on_join_room(data):
             return
         with rooms_lock:
             if room_id not in rooms:
-                room = Room(room_id, lives=lives, prefilled=prefilled,
+                room = Room(room_id, lives=lives, puzzle_difficulty=puzzle_difficulty,
                             turn_seconds=turn_seconds)
                 rooms[room_id] = room
             else:
@@ -497,15 +667,16 @@ def on_reset(data):
         return
     try:
         lives = max(1, min(5, int(data.get("lives", 3))))
-        prefilled = max(22, min(60, int(data.get("prefilled", 22))))
+        pd = data.get("puzzle_difficulty", "medium")
+        puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
         turn_seconds = max(0, min(300, int(data.get("turn_seconds", room.turn_seconds))))
     except (TypeError, ValueError):
         lives = 3
-        prefilled = 22
+        puzzle_difficulty = "medium"
         turn_seconds = room.turn_seconds
     with room.lock:
         room.turn_seconds = turn_seconds
-        room.game.reset(lives, prefilled)
+        room.game.reset(lives, puzzle_difficulty)
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
 
