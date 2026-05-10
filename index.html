@@ -1215,6 +1215,14 @@
       if (showAi && state.ai_difficulty) aiDiffEl.value = state.ai_difficulty;
     }
 
+    // Keep room badge and P2 label in sync with current AI difficulty
+    if (myAiDifficulty && state.ai_difficulty) {
+      document.getElementById('room-badge').innerHTML =
+        `vs AI <span class="ai-pill">${state.ai_difficulty}</span>`;
+      document.getElementById('p2-label').innerHTML =
+        `Player II · <span style="color:var(--leaf);font-style:normal">${state.ai_difficulty}</span>`;
+    }
+
     const last = state.last_move;
     const lastIsMe  = last && (isRace ? last.player === myPlayer : true);
     const lastIsOpp = isRace && last && myPlayer !== null && last.player !== myPlayer;
