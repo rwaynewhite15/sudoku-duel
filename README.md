@@ -37,10 +37,10 @@ Simultaneous. Both players receive identical boards and fill them independently 
 
 ### AI opponent
 - Four difficulty levels:
-  - **Easy** — 20% outright blunder; otherwise board-safe only 25% of the time (frequent mistakes)
-  - **Medium** — 8% outright blunder; otherwise board-safe 75% of the time (occasional mistakes)
-  - **Hard** — 3% outright blunder; otherwise always plays a board-safe move in a random cell
-  - **Expert** — 1% outright blunder; otherwise targets the most-constrained cell with a board-safe move
+  - **Easy** — 9% blunder rate; otherwise always plays a board-safe move (~50% puzzle completion)
+  - **Medium** — 5% blunder rate; otherwise always plays a board-safe move (~80% puzzle completion)
+  - **Hard** — 3% blunder rate; otherwise always plays a board-safe move (~90% puzzle completion)
+  - **Expert** — 1% blunder rate; otherwise targets the most-constrained cell (~99% puzzle completion)
 - AI pace in Race mode is scaled by difficulty (Easy ~20–40 s/move, Expert ~5–10 s/move)
 
 ### Race mode extras

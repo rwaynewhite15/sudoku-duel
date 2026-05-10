@@ -448,46 +448,32 @@ def _get_ai_move(game, difficulty, ai_player=1):
         return (r, c, random.choice(opts)) if opts else None
 
     if difficulty == 'easy':
-        # 20% outright blunder; otherwise 25% solvability-checked, 75% any valid digit
-        roll = random.random()
-        if roll < 0.20:
+        # 9% outright blunder; otherwise always solvability-checked (~50% completion)
+        if random.random() < 0.09:
             return _blunder()
-        use_solvable = roll < 0.40  # next 20% band → solvable (25% of non-blunder moves)
         random.shuffle(empty)
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
-            if not opts:
-                continue
-            if use_solvable:
-                random.shuffle(opts)
-                for v in opts:
-                    tmp = [row[:] for row in board]
-                    tmp[r][c] = v
-                    if _board_solvable(tmp):
-                        return r, c, v
-            else:
-                return r, c, random.choice(opts)
+            random.shuffle(opts)
+            for v in opts:
+                tmp = [row[:] for row in board]
+                tmp[r][c] = v
+                if _board_solvable(tmp):
+                    return r, c, v
 
     elif difficulty == 'medium':
-        # 8% outright blunder; otherwise 75% solvability-checked, 25% any valid digit
-        roll = random.random()
-        if roll < 0.08:
+        # 5% outright blunder; otherwise always solvability-checked (~80% completion)
+        if random.random() < 0.05:
             return _blunder()
-        use_solvable = roll < 0.77  # ~75% of non-blunder moves
         random.shuffle(empty)
         for r, c in empty:
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
-            if not opts:
-                continue
-            if use_solvable:
-                random.shuffle(opts)
-                for v in opts:
-                    tmp = [row[:] for row in board]
-                    tmp[r][c] = v
-                    if _board_solvable(tmp):
-                        return r, c, v
-            else:
-                return r, c, random.choice(opts)
+            random.shuffle(opts)
+            for v in opts:
+                tmp = [row[:] for row in board]
+                tmp[r][c] = v
+                if _board_solvable(tmp):
+                    return r, c, v
 
     elif difficulty == 'hard':
         # 3% outright blunder; otherwise always solvability-checked
