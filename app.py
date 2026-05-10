@@ -116,15 +116,12 @@ def _make_puzzle(prefilled):
 
 
 class SudokuGame:
-    def __init__(self, lives=3, prefilled=0):
+    def __init__(self, lives=3, prefilled=22):
         self.reset(lives, prefilled)
 
-    def reset(self, lives, prefilled=0):
+    def reset(self, lives, prefilled=22):
         self._givens = set()
-        if prefilled > 0:
-            self.board, self._givens = _make_puzzle(prefilled)
-        else:
-            self.board = [[0] * 9 for _ in range(9)]
+        self.board, self._givens = _make_puzzle(prefilled)
         self.lives = {0: lives, 1: lives}
         self.current_player = 0
         self.game_over = False
@@ -398,7 +395,7 @@ def on_join_room(data):
     sid = request.sid  # type: ignore[attr-defined]
     ai_difficulty = data.get("ai_difficulty")
     lives = max(1, min(5, int(data.get("lives", 3))))
-    prefilled = max(0, min(60, int(data.get("prefilled", 0))))
+    prefilled = max(22, min(60, int(data.get("prefilled", 22))))
     turn_seconds = max(0, min(300, int(data.get("turn_seconds", 0))))
 
     if ai_difficulty:
@@ -493,11 +490,11 @@ def on_reset(data):
         return
     try:
         lives = max(1, min(5, int(data.get("lives", 3))))
-        prefilled = max(0, min(60, int(data.get("prefilled", 0))))
+        prefilled = max(22, min(60, int(data.get("prefilled", 22))))
         turn_seconds = max(0, min(300, int(data.get("turn_seconds", room.turn_seconds))))
     except (TypeError, ValueError):
         lives = 3
-        prefilled = 0
+        prefilled = 22
         turn_seconds = room.turn_seconds
     with room.lock:
         room.turn_seconds = turn_seconds
