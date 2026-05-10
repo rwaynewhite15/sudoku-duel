@@ -601,8 +601,8 @@ def _handle_timeout(room, token):
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room.room_id)
     if (room.ai_player is not None and not room.game.game_over
-            and (room.game.mode == 'race'
-                 or room.game.current_player == room.ai_player)):
+            and room.game.mode != 'race'
+            and room.game.current_player == room.ai_player):
         _schedule_ai_move(room)
 
 
@@ -719,9 +719,11 @@ def on_move(data):
         room.game.make_move(pid, row, col, val)
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
+    # In race mode the AI timer is a self-sustaining chain started at join/reset;
+    # do NOT reschedule here or every player move stacks another parallel timer.
     if (room.ai_player is not None and not room.game.game_over
-            and (room.game.mode == 'race'
-                 or room.game.current_player == room.ai_player)):
+            and room.game.mode != 'race'
+            and room.game.current_player == room.ai_player):
         _schedule_ai_move(room)
 
 
