@@ -635,7 +635,8 @@ def on_disconnect():
 def on_join_room(data):
     sid = request.sid  # type: ignore[attr-defined]
     ai_difficulty = data.get("ai_difficulty")
-    lives = max(1, min(5, int(data.get("lives", 3))))
+    _l = int(data.get("lives", 3))
+    lives = 0 if _l == 0 else max(1, min(5, _l))
     pd = data.get("puzzle_difficulty", "medium")
     puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
     gm = data.get("mode", "duel")
@@ -733,7 +734,8 @@ def on_reset(data):
     if not room or sid not in room.sid_to_player:
         return
     try:
-        lives = max(1, min(5, int(data.get("lives", 3))))
+        _l = int(data.get("lives", 3))
+        lives = 0 if _l == 0 else max(1, min(5, _l))
         pd = data.get("puzzle_difficulty", "medium")
         puzzle_difficulty = pd if pd in ("easy", "medium", "hard") else "medium"
         gm = data.get("mode", room.mode)
