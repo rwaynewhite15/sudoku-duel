@@ -564,6 +564,7 @@
   .status.your-turn  { color: var(--accent); font-weight: 700; }
   .status.error      { color: var(--accent); }
   .status.waiting    { color: var(--ink-2); }
+  .status.loading    { color: var(--ink-2); animation: lobby-pulse 1.1s ease-in-out infinite; }
   .status.win, .status.lose {
     font-weight: 900;
     font-style: normal;
@@ -1038,10 +1039,20 @@
     if (state) render();
   });
 
+  let resetting = false;
+
+  function clearResetting() {
+    resetting = false;
+    const btn = document.getElementById('reset-btn');
+    btn.disabled = false;
+    btn.textContent = 'New Game';
+  }
+
   socket.on('state', s => {
     if (myRoom && s.room_id !== myRoom) return;
     state = s;
     if (s.ai_difficulty !== undefined) myAiDifficulty = s.ai_difficulty || null;
+    if (resetting) clearResetting();
     render();
   });
 
@@ -1367,6 +1378,12 @@
     const turnSeconds      = parseInt(document.getElementById('timer-select').value);
     const aiDifficulty     = document.getElementById('ai-diff-select').value;
     selected = null; armedNum = null;
+    resetting = true;
+    const btn = document.getElementById('reset-btn');
+    btn.disabled = true;
+    btn.textContent = 'Generating…';
+    statusEl.className = 'status loading';
+    statusEl.textContent = `Generating ${puzzleDifficulty} puzzle…`;
     socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds, ai_difficulty: aiDifficulty });
   });
 </script>
