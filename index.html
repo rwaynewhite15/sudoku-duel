@@ -107,6 +107,21 @@
   }
 
   /* ── Lobby ── */
+  .lobby-loading {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    text-align: center;
+    padding: 10px 0;
+    margin-bottom: 12px;
+    animation: lobby-pulse 1.1s ease-in-out infinite;
+  }
+  @keyframes lobby-pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
   .lobby-error {
     background: var(--accent);
     color: var(--paper);
@@ -655,6 +670,7 @@
   <p class="subtitle">Place a digit. Honor the rules. The reckless lose first.</p>
 
   <div id="lobby-error" class="lobby-error" style="display:none"></div>
+  <div id="lobby-loading" class="lobby-loading" style="display:none"></div>
 
   <div class="lobby-lives-row">
     <span class="ctrl-pair">
@@ -919,12 +935,12 @@
 
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
-    const roomId      = document.getElementById('room-input').value.trim();
+    const roomId           = document.getElementById('room-input').value.trim();
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
     const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
-    document.getElementById('lobby-error').style.display = 'none';
+    setLobbyLoading(puzzleDifficulty);
     socket.emit('join_room_req', { room_id: roomId, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
@@ -933,11 +949,12 @@
   });
 
   document.getElementById('ai-btn').addEventListener('click', () => {
-    const diff        = document.getElementById('difficulty-select').value;
+    const diff             = document.getElementById('difficulty-select').value;
     const lives            = parseInt(document.getElementById('lobby-lives').value);
     const puzzleDifficulty = document.getElementById('lobby-prefilled').value;
     const mode             = document.getElementById('lobby-mode').value;
     const turnSeconds      = parseInt(document.getElementById('lobby-timer').value);
+    setLobbyLoading(puzzleDifficulty);
     socket.emit('join_room_req', { ai_difficulty: diff, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
   });
 
@@ -946,10 +963,25 @@
     resetToLobby();
   });
 
+  function setLobbyLoading(diff) {
+    document.getElementById('lobby-loading').textContent = `Generating ${diff} puzzle…`;
+    document.getElementById('lobby-loading').style.display = 'block';
+    document.getElementById('lobby-error').style.display   = 'none';
+    document.getElementById('join-btn').disabled = true;
+    document.getElementById('ai-btn').disabled   = true;
+  }
+
+  function clearLobbyLoading() {
+    document.getElementById('lobby-loading').style.display = 'none';
+    document.getElementById('join-btn').disabled = false;
+    document.getElementById('ai-btn').disabled   = false;
+  }
+
   function resetToLobby() {
     myRoom = null; myPlayer = null; myAiDifficulty = null; state = null;
     selected = null; armedNum = null;
     stopTimerLoop();
+    clearLobbyLoading();
     document.getElementById('p2-label').textContent = 'Player II';
     document.getElementById('p2-name').textContent  = 'South';
     document.getElementById('spectator').style.display  = 'none';
@@ -963,6 +995,7 @@
   socket.on('disconnect', () => connEls.forEach(el => { el.textContent = 'offline'; el.classList.remove('live'); }));
 
   socket.on('room_error', data => {
+    clearLobbyLoading();
     const el = document.getElementById('lobby-error');
     el.textContent = data.message;
     el.style.display = 'block';
