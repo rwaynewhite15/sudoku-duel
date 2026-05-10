@@ -121,6 +121,7 @@ class SudokuGame:
 
     def reset(self, lives, prefilled=22):
         self._givens = set()
+        self.wrong_guesses: dict[tuple[int, int], set[int]] = {}
         self.board, self._givens = _make_puzzle(prefilled)
         self.lives = {0: lives, 1: lives}
         self.current_player = 0
@@ -164,12 +165,14 @@ class SudokuGame:
             "valid": valid, "reason": reason,
         }
         if valid:
+            self.wrong_guesses.pop((row, col), None)
             if all(self.board[r][c] != 0 for r in range(9) for c in range(9)):
                 self.game_over = True
                 self.winner = player
             else:
                 self.current_player = 1 - player
         else:
+            self.wrong_guesses.setdefault((row, col), set()).add(val)
             self.lives[player] -= 1
             if self.lives[player] <= 0:
                 self.game_over = True
@@ -188,6 +191,7 @@ class SudokuGame:
             "winner": self.winner,
             "last_move": self.last_move,
             "starting_lives": self.starting_lives,
+            "wrong_guesses": {f"{r},{c}": sorted(vals) for (r, c), vals in self.wrong_guesses.items()},
         }
 
 

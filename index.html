@@ -420,6 +420,21 @@
     75% { transform: translateX(-2px); }
   }
 
+  .cg {
+    position: absolute;
+    bottom: 2px;
+    left: 2px;
+    right: 2px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(5.5px, 1.5vw, 8px);
+    color: var(--accent);
+    font-weight: 600;
+    pointer-events: none;
+    overflow: hidden;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+
   .picker {
     display: grid;
     grid-template-columns: repeat(9, 1fr);
@@ -585,11 +600,11 @@
       <option value="4">4</option>
       <option value="5">5</option>
     </select>
-    <label for="lobby-prefilled">Pre-filled</label>
+    <label for="lobby-prefilled">Puzzle</label>
     <select id="lobby-prefilled">
-      <option value="22" selected>22</option>
-      <option value="30">30</option>
-      <option value="40">40</option>
+      <option value="40">Easy</option>
+      <option value="30" selected>Medium</option>
+      <option value="22">Hard</option>
     </select>
     <label for="lobby-timer">Timer</label>
     <select id="lobby-timer">
@@ -679,11 +694,11 @@
       <option value="4">4</option>
       <option value="5">5</option>
     </select>
-    <label for="prefilled-select">Pre-filled</label>
+    <label for="prefilled-select">Puzzle</label>
     <select id="prefilled-select">
-      <option value="22" selected>22</option>
-      <option value="30">30</option>
-      <option value="40">40</option>
+      <option value="40">Easy</option>
+      <option value="30" selected>Medium</option>
+      <option value="22">Hard</option>
     </select>
     <label for="timer-select">Timer</label>
     <select id="timer-select">
@@ -735,6 +750,12 @@
       if (r === 8) cell.classList.add('last-row');
       cell.dataset.r = r; cell.dataset.c = c;
       cell.addEventListener('click', () => onCellTap(r, c));
+      const cv = document.createElement('span');
+      cv.className = 'cv';
+      const cg = document.createElement('div');
+      cg.className = 'cg';
+      cell.appendChild(cv);
+      cell.appendChild(cg);
       boardEl.appendChild(cell);
     }
   }
@@ -932,15 +953,20 @@
     for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const cell = boardEl.children[r * 9 + c];
+        const cv   = cell.firstElementChild;
+        const cg   = cell.lastElementChild;
         const v    = state.board[r][c];
         cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given');
         const isGiven = state.given && state.given[r][c];
         if (v === 0) {
-          cell.textContent = '';
+          cv.textContent = '';
           cell.classList.add('empty');
           if (canPlay()) cell.classList.add('can-play');
+          const guesses = state.wrong_guesses && state.wrong_guesses[`${r},${c}`];
+          cg.textContent = guesses && guesses.length ? guesses.join('') : '';
         } else {
-          cell.textContent = v;
+          cv.textContent = v;
+          cg.textContent = '';
           if (isGiven) cell.classList.add('given');
         }
         if (last && last.row != null && last.valid && last.row === r && last.col === c) {
@@ -950,13 +976,18 @@
           if (last.valid) {
             cell.classList.add('fresh');
           } else if (v === 0) {
-            cell.textContent = last.val;
+            cv.textContent = last.val;
+            cg.textContent = '';
             cell.classList.add('error');
             const target = cell;
+            const targetCv = cv;
+            const targetCg = cg;
             setTimeout(() => {
               if (state && state.board[r][c] === 0) {
-                target.textContent = '';
+                targetCv.textContent = '';
                 target.classList.remove('error');
+                const guesses = state.wrong_guesses && state.wrong_guesses[`${r},${c}`];
+                targetCg.textContent = guesses && guesses.length ? guesses.join('') : '';
               }
             }, 650);
           }
