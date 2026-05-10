@@ -263,7 +263,7 @@
     grid-template-columns: 1fr auto 1fr;
     gap: 12px;
     align-items: center;
-    margin-bottom: 16px;
+    margin-bottom: 12px;
     padding: 14px 14px 12px;
     background: var(--paper-2);
     border: 1.5px solid var(--ink);
@@ -317,6 +317,38 @@
     background: var(--rule);
     margin: 4px auto;
   }
+
+  /* ── Turn timer ── */
+  .timer-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .timer-bar-track {
+    flex: 1;
+    height: 5px;
+    background: var(--rule);
+    border: 1px solid var(--ink);
+    overflow: hidden;
+  }
+  .timer-bar-fill {
+    height: 100%;
+    background: var(--leaf);
+    transition: width 0.25s linear, background 0.3s;
+  }
+  .timer-bar-fill.urgent { background: var(--accent); }
+  .timer-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-2);
+    min-width: 28px;
+    text-align: right;
+    letter-spacing: 0.05em;
+    transition: color 0.3s;
+  }
+  .timer-count.urgent { color: var(--accent); }
 
   .board-frame {
     background: var(--paper-3);
@@ -561,6 +593,13 @@
       <option value="30">30</option>
       <option value="40">40</option>
     </select>
+    <label for="lobby-timer">Timer</label>
+    <select id="lobby-timer">
+      <option value="0" selected>Off</option>
+      <option value="15">15 s</option>
+      <option value="30">30 s</option>
+      <option value="60">60 s</option>
+    </select>
   </div>
 
   <div class="lobby-card">
@@ -618,6 +657,13 @@
     </div>
   </div>
 
+  <div id="timer-bar-wrap" class="timer-bar-wrap" style="display:none">
+    <div class="timer-bar-track">
+      <div class="timer-bar-fill" id="timer-bar-fill"></div>
+    </div>
+    <span class="timer-count" id="timer-count">30</span>
+  </div>
+
   <div class="board-frame">
     <div class="board" id="board"></div>
   </div>
@@ -643,6 +689,13 @@
       <option value="30">30</option>
       <option value="40">40</option>
     </select>
+    <label for="timer-select">Timer</label>
+    <select id="timer-select">
+      <option value="0" selected>Off</option>
+      <option value="15">15 s</option>
+      <option value="30">30 s</option>
+      <option value="60">60 s</option>
+    </select>
     <button class="leave" id="leave-btn">Leave</button>
     <button class="reset" id="reset-btn">New Game</button>
   </div>
@@ -660,6 +713,11 @@
   let state = null;
   let selected = null;
   let armedNum = null;
+
+  // ── Timer state ──
+  let timerRAF = null;
+  let timerDeadline = null;
+  let timerTotal = 0;
 
   const lobbyEl   = document.getElementById('lobby');
   const gameEl    = document.getElementById('game-wrap');
@@ -694,13 +752,42 @@
     pickerEl.appendChild(b);
   }
 
+  // ── Timer helpers ──
+  function startTimerLoop() {
+    const wrap  = document.getElementById('timer-bar-wrap');
+    const fill  = document.getElementById('timer-bar-fill');
+    const count = document.getElementById('timer-count');
+    if (timerRAF) cancelAnimationFrame(timerRAF);
+
+    function tick() {
+      const remaining = Math.max(0, timerDeadline - Date.now() / 1000);
+      const pct    = timerTotal > 0 ? (remaining / timerTotal) * 100 : 0;
+      const urgent = remaining <= 5;
+      wrap.style.display = 'flex';
+      fill.style.width   = pct + '%';
+      fill.classList.toggle('urgent', urgent);
+      count.textContent = Math.ceil(remaining);
+      count.classList.toggle('urgent', urgent);
+      timerRAF = remaining > 0 ? requestAnimationFrame(tick) : null;
+    }
+    timerRAF = requestAnimationFrame(tick);
+  }
+
+  function stopTimerLoop() {
+    if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
+    document.getElementById('timer-bar-wrap').style.display = 'none';
+    timerDeadline = null;
+    timerTotal    = 0;
+  }
+
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
-    const roomId   = document.getElementById('room-input').value.trim();
-    const lives    = parseInt(document.getElementById('lobby-lives').value);
-    const prefilled = parseInt(document.getElementById('lobby-prefilled').value);
+    const roomId      = document.getElementById('room-input').value.trim();
+    const lives       = parseInt(document.getElementById('lobby-lives').value);
+    const prefilled   = parseInt(document.getElementById('lobby-prefilled').value);
+    const turnSeconds = parseInt(document.getElementById('lobby-timer').value);
     document.getElementById('lobby-error').style.display = 'none';
-    socket.emit('join_room_req', { room_id: roomId, lives, prefilled });
+    socket.emit('join_room_req', { room_id: roomId, lives, prefilled, turn_seconds: turnSeconds });
   });
 
   document.getElementById('room-input').addEventListener('keydown', e => {
@@ -708,10 +795,11 @@
   });
 
   document.getElementById('ai-btn').addEventListener('click', () => {
-    const diff      = document.getElementById('difficulty-select').value;
-    const lives     = parseInt(document.getElementById('lobby-lives').value);
-    const prefilled = parseInt(document.getElementById('lobby-prefilled').value);
-    socket.emit('join_room_req', { ai_difficulty: diff, lives, prefilled });
+    const diff        = document.getElementById('difficulty-select').value;
+    const lives       = parseInt(document.getElementById('lobby-lives').value);
+    const prefilled   = parseInt(document.getElementById('lobby-prefilled').value);
+    const turnSeconds = parseInt(document.getElementById('lobby-timer').value);
+    socket.emit('join_room_req', { ai_difficulty: diff, lives, prefilled, turn_seconds: turnSeconds });
   });
 
   document.getElementById('leave-btn').addEventListener('click', () => {
@@ -722,6 +810,7 @@
   function resetToLobby() {
     myRoom = null; myPlayer = null; myAiDifficulty = null; state = null;
     selected = null; armedNum = null;
+    stopTimerLoop();
     document.getElementById('p2-label').textContent = 'Player II';
     document.getElementById('p2-name').textContent  = 'South';
     document.getElementById('spectator').style.display  = 'none';
@@ -744,6 +833,9 @@
     myPlayer        = data.player;
     myRoom          = data.room_id;
     myAiDifficulty  = data.ai_difficulty || null;
+
+    // Sync in-game timer select to the room's setting
+    document.getElementById('timer-select').value = String(data.turn_seconds || 0);
 
     // Room badge
     const badge = document.getElementById('room-badge');
@@ -855,10 +947,10 @@
           cell.textContent = v;
           if (isGiven) cell.classList.add('given');
         }
-        if (last && last.valid && last.row === r && last.col === c) {
+        if (last && last.row != null && last.valid && last.row === r && last.col === c) {
           cell.classList.add('last-placed');
         }
-        if (last && last.row === r && last.col === c) {
+        if (last && last.row != null && last.row === r && last.col === c) {
           if (last.valid) {
             cell.classList.add('fresh');
           } else if (v === 0) {
@@ -876,10 +968,23 @@
       }
     }
 
+    // Digit usage count — disable picker buttons for exhausted digits
+    const digitCount = new Array(10).fill(0);
+    for (let r = 0; r < 9; r++)
+      for (let c = 0; c < 9; c++) {
+        const v = state.board[r][c];
+        if (v) digitCount[v]++;
+      }
+    pickerEl.querySelectorAll('button').forEach(b => {
+      const n = parseInt(b.dataset.val);
+      b.disabled = !canPlay() || digitCount[n] >= 9;
+    });
+
     statusEl.classList.remove('your-turn', 'error', 'win', 'lose', 'waiting');
     if (errorTimer) { clearTimeout(errorTimer); errorTimer = null; }
 
     if (state.game_over) {
+      stopTimerLoop();
       if (state.winner === myPlayer) {
         statusEl.textContent = '★ You win ★';
         statusEl.classList.add('win');
@@ -893,7 +998,10 @@
     } else if (last && !last.valid) {
       const isAiMove = myAiDifficulty && last.player === 1;
       const who = isAiMove ? 'AI' : (last.player === myPlayer ? 'You' : `Player ${last.player + 1}`);
-      statusEl.textContent = `${who} blundered — ${last.reason}`;
+      const msg = last.reason === "time's up"
+        ? `${who} ran out of time`
+        : `${who} blundered — ${last.reason}`;
+      statusEl.textContent = msg;
       statusEl.classList.add('error');
       errorTimer = setTimeout(() => {
         if (state && !state.game_over) updateTurnStatus();
@@ -902,7 +1010,15 @@
       updateTurnStatus();
     }
 
-    pickerEl.querySelectorAll('button').forEach(b => b.disabled = !canPlay());
+    // Turn timer bar
+    if (state.turn_deadline && state.turn_seconds > 0 && !state.game_over) {
+      timerDeadline = state.turn_deadline;
+      timerTotal    = state.turn_seconds;
+      startTimerLoop();
+    } else {
+      stopTimerLoop();
+    }
+
     renderSelection();
   }
 
@@ -931,10 +1047,11 @@
   }
 
   document.getElementById('reset-btn').addEventListener('click', () => {
-    const lives     = parseInt(document.getElementById('lives-select').value);
-    const prefilled = parseInt(document.getElementById('prefilled-select').value);
+    const lives       = parseInt(document.getElementById('lives-select').value);
+    const prefilled   = parseInt(document.getElementById('prefilled-select').value);
+    const turnSeconds = parseInt(document.getElementById('timer-select').value);
     selected = null; armedNum = null;
-    socket.emit('reset', { room_id: myRoom, lives, prefilled });
+    socket.emit('reset', { room_id: myRoom, lives, prefilled, turn_seconds: turnSeconds });
   });
 </script>
 </body>

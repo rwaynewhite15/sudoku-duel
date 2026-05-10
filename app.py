@@ -9,6 +9,7 @@ import argparse
 import os
 import random
 import threading
+import time
 import uuid
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
@@ -48,6 +49,32 @@ def _board_solvable(board):
     return _solve([row[:] for row in board], [0])
 
 
+def _count_solutions(board, limit=2):
+    """Count solutions up to limit, with step cap to avoid blocking."""
+    steps = [0]
+    count = [0]
+
+    def _rec(b):
+        if count[0] >= limit:
+            return
+        steps[0] += 1
+        if steps[0] > 200_000:
+            return
+        for r in range(9):
+            for c in range(9):
+                if b[r][c] == 0:
+                    for v in range(1, 10):
+                        if _can_place(b, r, c, v):
+                            b[r][c] = v
+                            _rec(b)
+                            b[r][c] = 0
+                    return
+        count[0] += 1
+
+    _rec([row[:] for row in board])
+    return count[0]
+
+
 def _fill_board(board, steps):
     steps[0] += 1
     if steps[0] > 500_000:
@@ -69,13 +96,22 @@ def _fill_board(board, steps):
 
 def _make_puzzle(prefilled):
     board = [[0] * 9 for _ in range(9)]
-    _fill_board(board, [0])
+    if not _fill_board(board, [0]):
+        return [[0] * 9 for _ in range(9)], set()
+    puzzle = [row[:] for row in board]
     cells = [(r, c) for r in range(9) for c in range(9)]
     random.shuffle(cells)
-    givens = set(cells[:min(prefilled, 81)])
-    puzzle = [[0] * 9 for _ in range(9)]
-    for r, c in givens:
-        puzzle[r][c] = board[r][c]
+    given_count = 81
+    for r, c in cells:
+        if given_count <= prefilled:
+            break
+        saved = puzzle[r][c]
+        puzzle[r][c] = 0
+        if _count_solutions(puzzle) == 1:
+            given_count -= 1
+        else:
+            puzzle[r][c] = saved  # removing this cell breaks uniqueness
+    givens = {(r, c) for r in range(9) for c in range(9) if puzzle[r][c] != 0}
     return puzzle, givens
 
 
@@ -217,7 +253,7 @@ def _get_ai_move(game, difficulty):
 
 
 class Room:
-    def __init__(self, room_id, lives=3, ai_difficulty=None, prefilled=0):
+    def __init__(self, room_id, lives=3, ai_difficulty=None, prefilled=0, turn_seconds=0):
         self.room_id = room_id
         self.game = SudokuGame(lives=lives, prefilled=prefilled)
         self.slots = [None, None]
@@ -225,8 +261,30 @@ class Room:
         self.ai_difficulty = ai_difficulty
         self.ai_player = 1 if ai_difficulty else None
         self.lock = threading.Lock()
+        self.turn_seconds = turn_seconds
+        self._turn_timer = None
+        self._turn_start = None
+        self._turn_token = None
         if ai_difficulty:
             self.slots[1] = '__AI__'
+
+    def _start_turn_timer(self):
+        if self._turn_timer:
+            self._turn_timer.cancel()
+        self._turn_token = random.random()
+        self._turn_start = time.time()
+        token = self._turn_token
+        t = threading.Timer(self.turn_seconds, _handle_timeout, args=[self, token])
+        t.daemon = True
+        t.start()
+        self._turn_timer = t
+
+    def _cancel_turn_timer(self):
+        if self._turn_timer:
+            self._turn_timer.cancel()
+            self._turn_timer = None
+        self._turn_start = None
+        self._turn_token = None
 
     def assign_slot(self, sid):
         for i in range(2):
@@ -254,11 +312,16 @@ class Room:
         return sum(1 for s in self.slots if s and s != '__AI__')
 
     def full_state(self):
+        deadline = None
+        if self.turn_seconds > 0 and self._turn_start and not self.game.game_over:
+            deadline = self._turn_start + self.turn_seconds
         return {
             **self.game.state(),
             "room_id": self.room_id,
             "room_ready": self.is_ready(),
             "ai_difficulty": self.ai_difficulty,
+            "turn_seconds": self.turn_seconds,
+            "turn_deadline": deadline,
         }
 
 
@@ -268,6 +331,40 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode="gevent")
 
 rooms = {}
 rooms_lock = threading.Lock()
+
+
+def _maybe_start_timer(room):
+    """Start turn timer if room is ready, game is active, and it's a human's turn."""
+    if room.turn_seconds <= 0 or room.game.game_over or not room.is_ready():
+        room._cancel_turn_timer()
+        return
+    if room.ai_player is not None and room.game.current_player == room.ai_player:
+        room._cancel_turn_timer()
+        return
+    room._start_turn_timer()
+
+
+def _handle_timeout(room, token):
+    with room.lock:
+        if room.game.game_over or room._turn_token != token:
+            return
+        player = room.game.current_player
+        room.game.lives[player] -= 1
+        room.game.last_move = {
+            "player": player, "row": None, "col": None, "val": None,
+            "valid": False, "reason": "time's up",
+        }
+        if room.game.lives[player] <= 0:
+            room.game.game_over = True
+            room.game.winner = 1 - player
+        else:
+            room.game.current_player = 1 - player
+    _maybe_start_timer(room)
+    socketio.emit("state", room.full_state(), to=room.room_id)
+    if (room.ai_player is not None
+            and not room.game.game_over
+            and room.game.current_player == room.ai_player):
+        _schedule_ai_move(room)
 
 
 @app.route("/")
@@ -301,10 +398,12 @@ def on_join_room(data):
     ai_difficulty = data.get("ai_difficulty")
     lives = max(1, min(5, int(data.get("lives", 3))))
     prefilled = max(0, min(60, int(data.get("prefilled", 0))))
+    turn_seconds = max(0, min(300, int(data.get("turn_seconds", 0))))
 
     if ai_difficulty:
         room_id = f"ai_{uuid.uuid4().hex[:8]}"
-        room = Room(room_id, lives=lives, ai_difficulty=ai_difficulty, prefilled=prefilled)
+        room = Room(room_id, lives=lives, ai_difficulty=ai_difficulty,
+                    prefilled=prefilled, turn_seconds=turn_seconds)
         with rooms_lock:
             rooms[room_id] = room
     else:
@@ -314,7 +413,8 @@ def on_join_room(data):
             return
         with rooms_lock:
             if room_id not in rooms:
-                room = Room(room_id, lives=lives, prefilled=prefilled)
+                room = Room(room_id, lives=lives, prefilled=prefilled,
+                            turn_seconds=turn_seconds)
                 rooms[room_id] = room
             else:
                 room = rooms[room_id]
@@ -329,8 +429,10 @@ def on_join_room(data):
         pid = room.assign_slot(sid)
 
     sio_join_room(room_id)
-    emit("welcome", {"player": pid, "room_id": room_id, "ai_difficulty": room.ai_difficulty})
+    emit("welcome", {"player": pid, "room_id": room_id, "ai_difficulty": room.ai_difficulty,
+                     "turn_seconds": room.turn_seconds})
     socketio.emit("state", room.full_state(), to=room_id)
+    _maybe_start_timer(room)
 
     if (room.ai_player is not None
             and room.game.current_player == room.ai_player
@@ -372,6 +474,7 @@ def on_move(data):
         return
     with room.lock:
         room.game.make_move(pid, row, col, val)
+    _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
     if (room.ai_player is not None
             and room.game.current_player == room.ai_player
@@ -390,11 +493,15 @@ def on_reset(data):
     try:
         lives = max(1, min(5, int(data.get("lives", 3))))
         prefilled = max(0, min(60, int(data.get("prefilled", 0))))
+        turn_seconds = max(0, min(300, int(data.get("turn_seconds", room.turn_seconds))))
     except (TypeError, ValueError):
         lives = 3
         prefilled = 0
+        turn_seconds = room.turn_seconds
     with room.lock:
+        room.turn_seconds = turn_seconds
         room.game.reset(lives, prefilled)
+    _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
 
 
@@ -414,6 +521,7 @@ def _do_ai_move(room):
             return
         r, c, v = move
         room.game.make_move(room.ai_player, r, c, v)
+    _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room.room_id)
     if room.game.current_player == room.ai_player and not room.game.game_over:
         _schedule_ai_move(room)
