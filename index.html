@@ -732,10 +732,10 @@
     <div class="lobby-card-sub">Solo game against a computer opponent</div>
     <div class="lobby-input-row">
       <select id="difficulty-select">
-        <option value="easy">Easy — blunders often</option>
-        <option value="medium" selected>Medium — plays safe</option>
-        <option value="hard">Hard — never blunders</option>
-        <option value="expert">Expert — most constrained cell</option>
+        <option value="easy">Easy — blunders ~20% of moves</option>
+        <option value="medium" selected>Medium — blunders ~8% of moves</option>
+        <option value="hard">Hard — rarely blunders (~3%)</option>
+        <option value="expert">Expert — almost never blunders (~1%)</option>
       </select>
       <button id="ai-btn" class="lobby-btn">Play</button>
     </div>
@@ -823,10 +823,10 @@
     <span class="ctrl-pair" id="ai-diff-pair" style="display:none">
       <label for="ai-diff-select">AI</label>
       <select id="ai-diff-select">
-        <option value="easy">Easy</option>
-        <option value="medium" selected>Medium</option>
-        <option value="hard">Hard</option>
-        <option value="expert">Expert</option>
+        <option value="easy">Easy — blunders ~20%</option>
+        <option value="medium" selected>Medium — blunders ~8%</option>
+        <option value="hard">Hard — rarely blunders (~3%)</option>
+        <option value="expert">Expert — almost never (~1%)</option>
       </select>
     </span>
     <span class="ctrl-pair">
