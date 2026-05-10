@@ -222,6 +222,15 @@
   }
 
   /* ── Game screen ── */
+  .game-info {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    text-align: center;
+    margin-bottom: 10px;
+  }
   .room-badge {
     display: inline-flex;
     align-items: center;
@@ -558,6 +567,11 @@
     padding-top: 12px;
     border-top: 1px solid var(--rule);
   }
+  .ctrl-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
   .controls label {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
@@ -643,32 +657,40 @@
   <div id="lobby-error" class="lobby-error" style="display:none"></div>
 
   <div class="lobby-lives-row">
-    <label for="lobby-lives">Lives</label>
-    <select id="lobby-lives">
-      <option value="1">1 — sudden death</option>
-      <option value="2">2</option>
-      <option value="3" selected>3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-    </select>
-    <label for="lobby-prefilled">Puzzle</label>
-    <select id="lobby-prefilled">
-      <option value="easy">Easy</option>
-      <option value="medium" selected>Medium</option>
-      <option value="hard">Hard</option>
-    </select>
-    <label for="lobby-mode">Mode</label>
-    <select id="lobby-mode">
-      <option value="duel" selected>Duel</option>
-      <option value="race">Race</option>
-    </select>
-    <label id="lobby-timer-label" for="lobby-timer">Timer</label>
-    <select id="lobby-timer">
-      <option value="0" selected>Off</option>
-      <option value="15">15 s</option>
-      <option value="30">30 s</option>
-      <option value="60">60 s</option>
-    </select>
+    <span class="ctrl-pair">
+      <label for="lobby-lives">Lives</label>
+      <select id="lobby-lives">
+        <option value="1">1 — sudden death</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </span>
+    <span class="ctrl-pair">
+      <label for="lobby-prefilled">Puzzle</label>
+      <select id="lobby-prefilled">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </span>
+    <span class="ctrl-pair">
+      <label for="lobby-mode">Mode</label>
+      <select id="lobby-mode">
+        <option value="duel" selected>Duel</option>
+        <option value="race">Race</option>
+      </select>
+    </span>
+    <span class="ctrl-pair" id="lobby-timer-pair">
+      <label for="lobby-timer">Timer</label>
+      <select id="lobby-timer">
+        <option value="0" selected>Off</option>
+        <option value="15">15 s</option>
+        <option value="30">30 s</option>
+        <option value="60">60 s</option>
+      </select>
+    </span>
   </div>
 
   <div class="lobby-card">
@@ -707,6 +729,7 @@
   </div>
 
   <div id="room-badge" class="room-badge" style="display:none"></div>
+  <div id="game-info" class="game-info"></div>
 
   <div id="spectator" class="spectator-banner" style="display:none">
     Spectating — both seats are taken.
@@ -755,32 +778,49 @@
   <div class="status" id="status">Connecting…</div>
 
   <div class="controls">
-    <label for="lives-select">Lives</label>
-    <select id="lives-select">
-      <option value="1">1 — sudden death</option>
-      <option value="2">2</option>
-      <option value="3" selected>3</option>
-      <option value="4">4</option>
-      <option value="5">5</option>
-    </select>
-    <label for="prefilled-select">Puzzle</label>
-    <select id="prefilled-select">
-      <option value="easy">Easy</option>
-      <option value="medium" selected>Medium</option>
-      <option value="hard">Hard</option>
-    </select>
-    <label for="mode-select">Mode</label>
-    <select id="mode-select">
-      <option value="duel" selected>Duel</option>
-      <option value="race">Race</option>
-    </select>
-    <label id="timer-select-label" for="timer-select">Timer</label>
-    <select id="timer-select">
-      <option value="0" selected>Off</option>
-      <option value="15">15 s</option>
-      <option value="30">30 s</option>
-      <option value="60">60 s</option>
-    </select>
+    <span class="ctrl-pair">
+      <label for="lives-select">Lives</label>
+      <select id="lives-select">
+        <option value="1">1 — sudden death</option>
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+    </span>
+    <span class="ctrl-pair">
+      <label for="prefilled-select">Puzzle</label>
+      <select id="prefilled-select">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+      </select>
+    </span>
+    <span class="ctrl-pair" id="ai-diff-pair" style="display:none">
+      <label for="ai-diff-select">AI</label>
+      <select id="ai-diff-select">
+        <option value="easy">Easy</option>
+        <option value="medium" selected>Medium</option>
+        <option value="hard">Hard</option>
+        <option value="expert">Expert</option>
+      </select>
+    </span>
+    <span class="ctrl-pair">
+      <label for="mode-select">Mode</label>
+      <select id="mode-select">
+        <option value="duel" selected>Duel</option>
+        <option value="race">Race</option>
+      </select>
+    </span>
+    <span class="ctrl-pair" id="timer-pair">
+      <label for="timer-select">Timer</label>
+      <select id="timer-select">
+        <option value="0" selected>Off</option>
+        <option value="15">15 s</option>
+        <option value="30">30 s</option>
+        <option value="60">60 s</option>
+      </select>
+    </span>
     <button class="leave" id="leave-btn">Leave</button>
     <button class="reset" id="reset-btn">New Game</button>
   </div>
@@ -873,9 +913,9 @@
 
   // ── Mode-conditional UI ──
   document.getElementById('lobby-mode').addEventListener('change', e =>
-    syncModeUI(e.target.value, 'lobby-lives', 'lobby-timer-label', 'lobby-timer'));
+    syncModeUI(e.target.value, 'lobby-lives', 'lobby-timer-pair'));
   document.getElementById('mode-select').addEventListener('change', e =>
-    syncModeUI(e.target.value, 'lives-select', 'timer-select-label', 'timer-select'));
+    syncModeUI(e.target.value, 'lives-select', 'timer-pair'));
 
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
@@ -960,6 +1000,7 @@
   socket.on('state', s => {
     if (myRoom && s.room_id !== myRoom) return;
     state = s;
+    if (s.ai_difficulty !== undefined) myAiDifficulty = s.ai_difficulty || null;
     render();
   });
 
@@ -1031,7 +1072,7 @@
     }
   }
 
-  function syncModeUI(mode, livesSelectId, timerLabelId, timerSelectId) {
+  function syncModeUI(mode, livesSelectId, timerPairId) {
     const livesEl = document.getElementById(livesSelectId);
     const isRace  = mode === 'race';
     const existing = livesEl.querySelector('option[value="0"]');
@@ -1042,9 +1083,7 @@
       if (livesEl.value === '0') livesEl.value = '3';
       existing.remove();
     }
-    const hide = isRace ? 'none' : '';
-    document.getElementById(timerLabelId).style.display  = hide;
-    document.getElementById(timerSelectId).style.display = hide;
+    document.getElementById(timerPairId).style.display = isRace ? 'none' : '';
   }
 
   let errorTimer = null;
@@ -1087,9 +1126,25 @@
       raceWrap.style.display = 'none';
     }
 
-    // Sync mode-select to current state
+    // Puzzle difficulty display
+    const gameInfoEl = document.getElementById('game-info');
+    if (gameInfoEl) gameInfoEl.textContent = state.puzzle_difficulty || '';
+
+    // Sync mode-select; trigger syncModeUI when mode changes
     const modeEl = document.getElementById('mode-select');
-    if (modeEl && state.mode) modeEl.value = state.mode;
+    if (modeEl && state.mode && modeEl.value !== state.mode) {
+      modeEl.value = state.mode;
+      syncModeUI(state.mode, 'lives-select', 'timer-pair');
+    }
+
+    // Show/hide and sync AI difficulty select
+    const aiDiffPair = document.getElementById('ai-diff-pair');
+    const aiDiffEl   = document.getElementById('ai-diff-select');
+    if (aiDiffPair && aiDiffEl) {
+      const showAi = !!myAiDifficulty;
+      aiDiffPair.style.display = showAi ? '' : 'none';
+      if (showAi && state.ai_difficulty) aiDiffEl.value = state.ai_difficulty;
+    }
 
     const last = state.last_move;
     const lastIsMe  = last && (isRace ? last.player === myPlayer : true);
@@ -1238,12 +1293,13 @@
   }
 
   document.getElementById('reset-btn').addEventListener('click', () => {
-    const lives       = parseInt(document.getElementById('lives-select').value);
+    const lives            = parseInt(document.getElementById('lives-select').value);
     const puzzleDifficulty = document.getElementById('prefilled-select').value;
     const mode             = document.getElementById('mode-select').value;
     const turnSeconds      = parseInt(document.getElementById('timer-select').value);
+    const aiDifficulty     = document.getElementById('ai-diff-select').value;
     selected = null; armedNum = null;
-    socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds });
+    socket.emit('reset', { room_id: myRoom, lives, puzzle_difficulty: puzzleDifficulty, mode, turn_seconds: turnSeconds, ai_difficulty: aiDifficulty });
   });
 </script>
 </body>

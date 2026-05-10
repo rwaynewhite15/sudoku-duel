@@ -292,6 +292,7 @@ class SudokuGame:
 
     def reset(self, lives, puzzle_difficulty: str = 'medium'):
         self._givens = set()
+        self.puzzle_difficulty = puzzle_difficulty
         template, self._givens = _get_hub().threadpool.apply(_make_puzzle, (puzzle_difficulty,))
         self.board = template
         if self.mode == 'race':
@@ -403,6 +404,7 @@ class SudokuGame:
         given = [[(r, c) in self._givens for c in range(9)] for r in range(9)]
         base = {
             "mode": self.mode,
+            "puzzle_difficulty": self.puzzle_difficulty,
             "given": given,
             "lives": self.lives,
             "game_over": self.game_over,
@@ -743,18 +745,27 @@ def on_reset(data):
         gm = data.get("mode", room.mode)
         new_mode = gm if gm in ("duel", "race") else room.mode
         turn_seconds = max(0, min(300, int(data.get("turn_seconds", room.turn_seconds))))
+        ad = data.get("ai_difficulty", room.ai_difficulty)
+        new_ai_diff = ad if ad in ("easy", "medium", "hard", "expert") else room.ai_difficulty
     except (TypeError, ValueError):
         lives = 3
         puzzle_difficulty = "medium"
         new_mode = room.mode
         turn_seconds = room.turn_seconds
+        new_ai_diff = room.ai_difficulty
     with room.lock:
         room.mode = new_mode
         room.game.mode = new_mode
         room.turn_seconds = turn_seconds
+        if room.ai_difficulty:
+            room.ai_difficulty = new_ai_diff
         room.game.reset(lives, puzzle_difficulty)
     _maybe_start_timer(room)
     socketio.emit("state", room.full_state(), to=room_id)
+    if (room.ai_player is not None and not room.game.game_over
+            and (room.game.mode == 'race'
+                 or room.game.current_player == room.ai_player)):
+        _schedule_ai_move(room)
 
 
 def _schedule_ai_move(room):
