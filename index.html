@@ -1272,14 +1272,20 @@
 
     if (state.game_over) {
       stopTimerLoop();
+      const livesOf = p => state.lives[String(p)] ?? state.lives[p] ?? 0;
+      const wasDQ   = p => state.starting_lives > 0 && livesOf(p) <= 0;
       if (state.winner === myPlayer) {
-        statusEl.textContent = isRace ? '🏁 You finished first!' : '★ You win ★';
+        let msg = isRace ? '🏁 You finished first!' : '★ You win ★';
+        if (isRace && wasDQ(1 - myPlayer)) msg = 'Opponent disqualified';
+        statusEl.textContent = msg;
         statusEl.classList.add('win');
       } else if (myPlayer === null) {
-        const winnerName = (myAiDifficulty && state.winner === 1) ? 'AI' : `Player ${state.winner + 1}`;
+        const winnerName = state.names?.[String(state.winner)] || `Player ${state.winner + 1}`;
         statusEl.textContent = `${winnerName} wins`;
       } else {
-        statusEl.textContent = isRace ? 'Opponent finished first' : 'You lose';
+        let msg = isRace ? 'Opponent finished first' : 'You lose';
+        if (isRace && wasDQ(myPlayer)) msg = 'You have been disqualified';
+        statusEl.textContent = msg;
         statusEl.classList.add('lose');
       }
     } else if (last && !last.valid && lastIsMe) {
