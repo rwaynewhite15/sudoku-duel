@@ -454,11 +454,21 @@ def _get_ai_move(game, difficulty, ai_player=1):
                 return r, c, random.choice(opts)
 
     elif difficulty == 'medium':
-        random.shuffle(empty)
-        for r, c in empty:
+        # ~8% intentional blunder; otherwise play a board-safe move like Hard
+        if random.random() < 0.08:
+            r, c = random.choice(empty)
             opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
             if opts:
                 return r, c, random.choice(opts)
+        random.shuffle(empty)
+        for r, c in empty:
+            opts = [v for v in range(1, 10) if _can_place(board, r, c, v)]
+            random.shuffle(opts)
+            for v in opts:
+                tmp = [row[:] for row in board]
+                tmp[r][c] = v
+                if _board_solvable(tmp):
+                    return r, c, v
 
     elif difficulty == 'hard':
         random.shuffle(empty)

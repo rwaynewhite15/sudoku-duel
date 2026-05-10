@@ -38,7 +38,7 @@ Simultaneous. Both players receive identical boards and fill them independently 
 ### AI opponent
 - Four difficulty levels:
   - **Easy** — blunders 30% of the time; random cell, random valid digit otherwise
-  - **Medium** — always plays a valid digit in a random empty cell
+  - **Medium** — blunders ~8% of the time; otherwise plays valid, board-safe moves
   - **Hard** — never blunders; plays valid, board-safe moves in a random cell
   - **Expert** — always targets the most-constrained cell (fewest candidates)
 - AI pace in Race mode is scaled by difficulty (Easy ~20–40 s/move, Expert ~5–10 s/move)
