@@ -1275,17 +1275,21 @@
       const livesOf = p => state.lives[String(p)] ?? state.lives[p] ?? 0;
       const wasDQ   = p => state.starting_lives > 0 && livesOf(p) <= 0;
       if (state.winner === myPlayer) {
-        let msg = isRace ? '🏁 You finished first!' : '★ You win ★';
-        if (isRace && wasDQ(1 - myPlayer)) msg = 'Opponent disqualified';
-        statusEl.textContent = msg;
+        if (isRace && wasDQ(1 - myPlayer)) {
+          statusEl.innerHTML = 'Opponent Disqualified<br>★ You win ★';
+        } else {
+          statusEl.textContent = isRace ? '🏁 You finished first!' : '★ You win ★';
+        }
         statusEl.classList.add('win');
       } else if (myPlayer === null) {
         const winnerName = state.names?.[String(state.winner)] || `Player ${state.winner + 1}`;
         statusEl.textContent = `${winnerName} wins`;
       } else {
-        let msg = isRace ? 'Opponent finished first' : 'You lose';
-        if (isRace && wasDQ(myPlayer)) msg = 'You have been disqualified';
-        statusEl.textContent = msg;
+        if (isRace && wasDQ(myPlayer)) {
+          statusEl.innerHTML = 'You were Disqualified<br>You lose';
+        } else {
+          statusEl.textContent = isRace ? 'Opponent finished first' : 'You lose';
+        }
         statusEl.classList.add('lose');
       }
     } else if (last && !last.valid && lastIsMe) {
