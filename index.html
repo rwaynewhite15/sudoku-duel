@@ -405,6 +405,7 @@
   .cell.last-placed { color: var(--blue); }
   .cell.error      { animation: shake 0.55s ease; color: var(--accent) !important; }
   .cell.given      { background: var(--paper-2); cursor: default; font-weight: 700; }
+  .cell.opp-filled { background: rgba(37,99,235,0.10); }
   @media (hover: hover) { .cell.given:hover { background: var(--paper-2) !important; } }
 
   @keyframes drop-in {
@@ -1060,14 +1061,18 @@
     // Only show the last-move highlight if this player was involved (race) or it's shared (duel)
     const lastIsMe = last && (isRace ? last.player === myPlayer : true);
 
+    const oppBoard = (isRace && myPlayer !== null)
+        ? state.boards[String(1 - myPlayer)] : null;
+
     if (board) for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
         const cell = boardEl.children[r * 9 + c];
         const cv   = cell.firstElementChild;
         const cg   = cell.lastElementChild;
         const v    = board[r][c];
-        cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given');
+        cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given', 'opp-filled');
         const isGiven = state.given && state.given[r][c];
+        cell.classList.toggle('opp-filled', !isGiven && v === 0 && !!(oppBoard && oppBoard[r][c] !== 0));
         if (v === 0) {
           cv.textContent = '';
           cell.classList.add('empty');

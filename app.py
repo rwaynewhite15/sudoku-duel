@@ -752,7 +752,17 @@ def on_reset(data):
 
 
 def _schedule_ai_move(room):
-    delay = random.uniform(0.7, 1.5)
+    if room.game.mode == 'race':
+        race_delays = {
+            'easy':   (5.0, 10.0),
+            'medium': (3.0,  6.0),
+            'hard':   (2.0,  4.0),
+            'expert': (1.2,  2.5),
+        }
+        lo, hi = race_delays.get(room.ai_difficulty, (3.0, 6.0))
+    else:
+        lo, hi = 0.7, 1.5
+    delay = random.uniform(lo, hi)
     t = threading.Timer(delay, _do_ai_move, args=[room])
     t.daemon = True
     t.start()
