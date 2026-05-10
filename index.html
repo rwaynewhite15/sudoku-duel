@@ -1160,9 +1160,9 @@
         const fillEl = document.getElementById(`race-fill-${p}`);
         fillEl.style.width = pct + '%';
         fillEl.classList.toggle('you', isYou);
-        const blinking = pct >= 95;
+        const blinking = pct >= 90 && pct < 100;
         fillEl.classList.toggle('blink', blinking);
-        fillEl.style.background = blinking ? '' : `hsl(${Math.round(pct * 1.2)},65%,38%)`;
+        fillEl.style.background = (blinking || pct === 100) ? '' : `hsl(${Math.round(pct * 1.2)},65%,38%)`;
         document.getElementById(`race-pct-${p}`).textContent = pct + '%';
         document.getElementById(`race-pct-${p}`).classList.toggle('you', isYou);
         document.getElementById(`race-label-${p}`).classList.toggle('you', isYou);
