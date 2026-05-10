@@ -479,6 +479,14 @@
     transition: width 0.35s ease;
   }
   .race-bar-fill.you { background: var(--accent); }
+  .race-bar-fill.blink {
+    background: var(--leaf) !important;
+    animation: race-blink 0.55s ease-in-out infinite;
+  }
+  @keyframes race-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
   .race-pct {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
@@ -1149,8 +1157,14 @@
         const prog  = (state.progress && state.progress[String(p)]) || 0;
         const pct   = Math.round(prog / total * 100);
         const isYou = p === myPlayer;
-        document.getElementById(`race-fill-${p}`).style.width = pct + '%';
-        document.getElementById(`race-fill-${p}`).classList.toggle('you', isYou);
+        const fillEl = document.getElementById(`race-fill-${p}`);
+        fillEl.style.width = pct + '%';
+        fillEl.classList.toggle('you', isYou);
+        if (isYou) {
+          const blinking = pct >= 95;
+          fillEl.classList.toggle('blink', blinking);
+          fillEl.style.background = blinking ? '' : `hsl(${Math.round(pct * 1.2)},65%,38%)`;
+        }
         document.getElementById(`race-pct-${p}`).textContent = pct + '%';
         document.getElementById(`race-pct-${p}`).classList.toggle('you', isYou);
         document.getElementById(`race-label-${p}`).classList.toggle('you', isYou);
