@@ -758,12 +758,12 @@ def on_reset(data):
 def _schedule_ai_move(room):
     if room.game.mode == 'race':
         race_delays = {
-            'easy':   (5.0, 10.0),
-            'medium': (3.0,  6.0),
-            'hard':   (2.0,  4.0),
-            'expert': (1.2,  2.5),
+            'easy':   (20.0, 40.0),
+            'medium': (12.0, 24.0),
+            'hard':   ( 8.0, 16.0),
+            'expert': ( 5.0, 10.0),
         }
-        lo, hi = race_delays.get(room.ai_difficulty, (3.0, 6.0))
+        lo, hi = race_delays.get(room.ai_difficulty, (12.0, 24.0))
     else:
         lo, hi = 0.7, 1.5
     delay = random.uniform(lo, hi)
