@@ -406,6 +406,11 @@
   .cell.error      { animation: shake 0.55s ease; color: var(--accent) !important; }
   .cell.given      { background: var(--paper-2); cursor: default; font-weight: 700; }
   .cell.opp-filled { background: rgba(37,99,235,0.10); }
+  .cell.opp-error  { animation: opp-err-flash 0.65s ease; }
+  @keyframes opp-err-flash {
+    0%, 100% { background: transparent; }
+    30%      { background: rgba(179,38,25,0.22); }
+  }
   @media (hover: hover) { .cell.given:hover { background: var(--paper-2) !important; } }
 
   @keyframes drop-in {
@@ -657,7 +662,7 @@
       <option value="duel" selected>Duel</option>
       <option value="race">Race</option>
     </select>
-    <label for="lobby-timer">Timer</label>
+    <label id="lobby-timer-label" for="lobby-timer">Timer</label>
     <select id="lobby-timer">
       <option value="0" selected>Off</option>
       <option value="15">15 s</option>
@@ -769,7 +774,7 @@
       <option value="duel" selected>Duel</option>
       <option value="race">Race</option>
     </select>
-    <label for="timer-select">Timer</label>
+    <label id="timer-select-label" for="timer-select">Timer</label>
     <select id="timer-select">
       <option value="0" selected>Off</option>
       <option value="15">15 s</option>
@@ -865,6 +870,12 @@
     timerDeadline = null;
     timerTotal    = 0;
   }
+
+  // ── Mode-conditional UI ──
+  document.getElementById('lobby-mode').addEventListener('change', e =>
+    syncModeUI(e.target.value, 'lobby-lives', 'lobby-timer-label', 'lobby-timer'));
+  document.getElementById('mode-select').addEventListener('change', e =>
+    syncModeUI(e.target.value, 'lives-select', 'timer-select-label', 'timer-select'));
 
   // ── Lobby handlers ──
   document.getElementById('join-btn').addEventListener('click', () => {
@@ -1005,12 +1016,35 @@
   function renderHearts(elId, count, total) {
     const el = document.getElementById(elId);
     el.innerHTML = '';
+    if (total === 0) {
+      const span = document.createElement('span');
+      span.style.cssText = 'font-family:monospace;font-size:14px;opacity:0.6;';
+      span.textContent = '∞';
+      el.appendChild(span);
+      return;
+    }
     for (let i = 0; i < total; i++) {
       const span = document.createElement('span');
       span.className = 'heart' + (i < count ? '' : ' gone');
       span.innerHTML = HEART_SVG;
       el.appendChild(span);
     }
+  }
+
+  function syncModeUI(mode, livesSelectId, timerLabelId, timerSelectId) {
+    const livesEl = document.getElementById(livesSelectId);
+    const isRace  = mode === 'race';
+    const existing = livesEl.querySelector('option[value="0"]');
+    if (isRace && !existing) {
+      const opt = new Option('∞ — unlimited', '0');
+      livesEl.insertBefore(opt, livesEl.firstChild);
+    } else if (!isRace && existing) {
+      if (livesEl.value === '0') livesEl.value = '3';
+      existing.remove();
+    }
+    const hide = isRace ? 'none' : '';
+    document.getElementById(timerLabelId).style.display  = hide;
+    document.getElementById(timerSelectId).style.display = hide;
   }
 
   let errorTimer = null;
@@ -1058,11 +1092,12 @@
     if (modeEl && state.mode) modeEl.value = state.mode;
 
     const last = state.last_move;
-    // Only show the last-move highlight if this player was involved (race) or it's shared (duel)
-    const lastIsMe = last && (isRace ? last.player === myPlayer : true);
+    const lastIsMe  = last && (isRace ? last.player === myPlayer : true);
+    const lastIsOpp = isRace && last && myPlayer !== null && last.player !== myPlayer;
 
-    const oppBoard = (isRace && myPlayer !== null)
-        ? state.boards[String(1 - myPlayer)] : null;
+    const oppIdx   = isRace && myPlayer !== null ? 1 - myPlayer : null;
+    const oppBoard = oppIdx !== null ? state.boards[String(oppIdx)] : null;
+    const oppWg    = oppIdx !== null ? state.wrong_guesses[String(oppIdx)] : null;
 
     if (board) for (let r = 0; r < 9; r++) {
       for (let c = 0; c < 9; c++) {
@@ -1073,12 +1108,19 @@
         cell.classList.remove('fresh', 'error', 'selected', 'empty', 'can-play', 'last-placed', 'given', 'opp-filled');
         const isGiven = state.given && state.given[r][c];
         cell.classList.toggle('opp-filled', !isGiven && v === 0 && !!(oppBoard && oppBoard[r][c] !== 0));
+        if (lastIsOpp && !last.valid && last.row != null && last.row === r && last.col === c && v === 0) {
+          const target = cell;
+          cell.classList.add('opp-error');
+          setTimeout(() => target.classList.remove('opp-error'), 650);
+        }
         if (v === 0) {
           cv.textContent = '';
           cell.classList.add('empty');
           if (canPlay()) cell.classList.add('can-play');
-          const guesses = wg && wg[`${r},${c}`];
-          cg.textContent = guesses && guesses.length ? guesses.join('') : '';
+          const myGs  = (wg   && wg[`${r},${c}`])   || [];
+          const oppGs = (oppWg && oppWg[`${r},${c}`]) || [];
+          const allGs = [...new Set([...myGs, ...oppGs])].sort((a, b) => a - b);
+          cg.textContent = allGs.length ? allGs.join('') : '';
         } else {
           cv.textContent = v;
           cg.textContent = '';

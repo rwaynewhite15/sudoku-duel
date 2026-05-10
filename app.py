@@ -358,12 +358,13 @@ class SudokuGame:
                 self.current_player = 1 - player
         else:
             self.wrong_guesses.setdefault((row, col), set()).add(val)
-            self.lives[player] -= 1
-            if self.lives[player] <= 0:
-                self.game_over = True
-                self.winner = 1 - player
-            else:
-                self.current_player = 1 - player
+            if self.starting_lives > 0:
+                self.lives[player] -= 1
+                if self.lives[player] <= 0:
+                    self.game_over = True
+                    self.winner = 1 - player
+                    return reason
+            self.current_player = 1 - player
         return reason
 
     def _race_move(self, player, row, col, val):
@@ -386,10 +387,11 @@ class SudokuGame:
                 self.winner = player
         else:
             self.race_wrong[player].setdefault((row, col), set()).add(val)
-            self.lives[player] -= 1
-            if self.lives[player] <= 0:
-                self.game_over = True
-                self.winner = 1 - player
+            if self.starting_lives > 0:
+                self.lives[player] -= 1
+                if self.lives[player] <= 0:
+                    self.game_over = True
+                    self.winner = 1 - player
         return reason
 
     def _race_progress(self, player):
